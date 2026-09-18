@@ -21,6 +21,10 @@ where
             self.request = request
         }
 
+        public subscript<Member>(dynamicMember keyPath: KeyPath<Symbol.Input, Member>) -> Member {
+            request[keyPath: keyPath]
+        }
+
         public subscript<Member>(dynamicMember keyPath: WritableKeyPath<Symbol.Input, Member>) -> Member {
             get { request[keyPath: keyPath] }
             set { request[keyPath: keyPath] = newValue }
