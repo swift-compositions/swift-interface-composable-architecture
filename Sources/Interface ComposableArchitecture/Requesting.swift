@@ -1,44 +1,51 @@
 public import ComposableArchitecture2
+public import Dependencies
 public import Operation
 
-// A request being composed: sent whole, at most once at a time; the feature dismisses itself when the
-// send succeeds and keeps the failure on `sending` otherwise. Cancelling is the parent's to handle.
-@ComposableArchitecture2.Feature public struct Requesting<Symbol: Operation.Symbol>
-where Symbol.Input: Swift.Copyable & Swift.Escapable, Symbol.Output: Swift.Copyable & Swift.Escapable {
+// An operation's input being composed, then sent: the feature's actions are the calls of the operation's
+// interface, each run on `sending`; a call that succeeds dismisses the feature, one that fails stays, its error
+// on `sending`. `Requesting<Reminders.Lists.Create>(\.reminders.lists)` — the symbol names the input, the
+// interface runs the calls.
+@ComposableArchitecture2.Feature public struct Requesting<Symbol: Operation.Composed>
+where
+    Symbol.Input: Swift.Copyable & Swift.Escapable,
+    Symbol.Call: Swift.Copyable & CasePathable
+{
+    // The state reads as the input it composes: `store.title` is `store.request.title`.
+    @dynamicMemberLookup
     public struct State {
         public var request: Symbol.Input
         @StoreTaskID public var sending
 
-        public init(request: Symbol.Input) {
+        public init(_ request: Symbol.Input) {
             self.request = request
+        }
+
+        public subscript<Member>(dynamicMember keyPath: WritableKeyPath<Symbol.Input, Member>) -> Member {
+            get { request[keyPath: keyPath] }
+            set { request[keyPath: keyPath] = newValue }
         }
     }
 
-    public enum Action {
-        case cancelButtonTapped
-        case sendButtonTapped
+    public typealias Action = Symbol.Call
+
+    let interpret: (Action) async throws -> Void
+
+    public init(_ owner: Symbol.Owner) {
+        self.interpret = { try await Symbol.Call.run(owner, $0) }
     }
 
-    // The request is read out of the feature's state and handed to the arrow in the feature's own region; see
-    // Observing for why it is neither Sendable nor `sending`.
-    let send: (Symbol.Input) async throws -> Symbol.Output
-
-    public init(_ send: @escaping (Symbol.Input) async throws -> Symbol.Output) {
-        self.send = send
+    // The interface is read from the dependencies each time a call is sent.
+    public init(_ path: KeyPath<DependencyValues, Symbol.Owner> & Sendable) {
+        self.interpret = { try await Symbol.Call.run(Dependency(path).wrappedValue, $0) }
     }
 
     public var body: some ComposableArchitecture2.FeatureProtocol<State, Action> {
         ComposableArchitecture2.Update { state, action in
-            switch action {
-            case .cancelButtonTapped:
-                break
-            case .sendButtonTapped:
-                guard !state.sending.isRunning else { break }
-                let request = state.request
-                store.addTask(id: state.sending) {
-                    _ = try await send(request)
-                    try store.dismiss()
-                }
+            guard !state.sending.isRunning else { return }
+            store.addTask(id: state.sending) {
+                try await interpret(action)
+                try store.dismiss()
             }
         }
     }
