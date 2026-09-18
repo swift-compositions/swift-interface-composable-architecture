@@ -8,6 +8,7 @@ struct Counter: Counter.Interface {
         case refused
     }
 
+    @Operations
     protocol Interface {
         func increment(by amount: Int) async throws(Failure)
         func observe(from start: Int) -> AsyncThrowingStream<Int, any Swift.Error>

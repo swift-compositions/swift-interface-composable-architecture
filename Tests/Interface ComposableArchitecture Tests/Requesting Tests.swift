@@ -9,8 +9,8 @@ import Testing
     // The sheet sends its request whole and dismisses itself when the send succeeds.
     @Test func `a successful send dismisses`() async throws {
         let ledger = Ledger()
-        let store = TestStore(initialState: Requesting<Counter.Operations.Increment>.State(request: .init(by: 3))) {
-            Requesting<Counter.Operations.Increment> { request in ledger.record("increment \(request.amount)") }
+        let store = TestStore(initialState: Requesting<Counter.Increment>.State(request: .init(by: 3))) {
+            Requesting<Counter.Increment> { request in ledger.record("increment \(request.amount)") }
         }
         store.send(.sendButtonTapped)
         try await store.sending()
@@ -20,8 +20,8 @@ import Testing
 
     // A failed send stays on the sheet, recorded on `sending`.
     @Test func `a failed send is recorded on sending`() async throws {
-        let store = TestStore(initialState: Requesting<Counter.Operations.Increment>.State(request: .init(by: 3))) {
-            Requesting<Counter.Operations.Increment> { _ in throw Counter.Failure.refused }
+        let store = TestStore(initialState: Requesting<Counter.Increment>.State(request: .init(by: 3))) {
+            Requesting<Counter.Increment> { _ in throw Counter.Failure.refused }
         }
         store.send(.sendButtonTapped)
         await #expect(throws: Counter.Failure.refused) { try await store.sending() }
