@@ -6,7 +6,7 @@ is universal: the atoms and the macro know nothing of features or stores; this p
 | Type | What it is |
 | --- | --- |
 | `Observing<Symbol>` | A feature over an observe operation: `value` follows the operation's async sequence for `request`, and a new request restarts it. Takes the operation's arrow `(Input) -> Output` where `Output: AsyncSequence`. |
-| `Requesting<Symbol>` | A feature whose state is a request being composed: `sendButtonTapped` sends it whole on the `sending` task id and dismisses on success. Takes the operation's arrow `(Input) async throws -> Output`. |
+| `Requesting<Symbol>` | A feature whose state is a request being composed: `sendButtonTapped` sends it whole on the `sending` task id and dismisses on success. Takes the operation's arrow `(Input) async throws -> Output` — a closure over the interface's request-typed witness, `{ try await reminders.lists.create($0) }`. |
 | `FeatureProtocol.calling(_:id:_:)` | A modifier that runs the interface's interpreter for every action carrying a `Call`, as a task on the given id: `.calling(\.call, id: \.writes) { try await reminders($0) }`. |
 
 `Symbol` is an `Operation.Symbol` whose `Input` is the operation's `Request` — the same value the interface

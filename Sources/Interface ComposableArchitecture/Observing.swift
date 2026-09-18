@@ -19,6 +19,10 @@ where
         }
     }
 
+    // The request is read out of the feature's state and handed to the arrow in the feature's own region; the
+    // arrow is not required to be Sendable and the request is not sent — the store's task runs where the
+    // feature does. (`sending` on this parameter is rejected: a value copied out of `inout State` is not in a
+    // disconnected region.)
     let observe: (Symbol.Input) -> Symbol.Output
 
     public init(_ observe: @escaping (Symbol.Input) -> Symbol.Output) {

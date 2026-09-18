@@ -21,7 +21,7 @@ import Testing
             read: { _ in 0 }
         )
         let store = TestStore(initialState: Observing<Counter.Operations.Observe>.State(request: .init(from: 10))) {
-            Observing(counter.observe.run)
+            Observing { counter.observe($0) }
         }
         while store.value == nil { await Task.yield() }
         store.expect { $0.value = 11 }

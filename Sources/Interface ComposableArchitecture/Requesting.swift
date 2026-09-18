@@ -19,6 +19,8 @@ where Symbol.Input: Swift.Copyable & Swift.Escapable, Symbol.Output: Swift.Copya
         case sendButtonTapped
     }
 
+    // The request is read out of the feature's state and handed to the arrow in the feature's own region; see
+    // Observing for why it is neither Sendable nor `sending`.
     let send: (Symbol.Input) async throws -> Symbol.Output
 
     public init(_ send: @escaping (Symbol.Input) async throws -> Symbol.Output) {

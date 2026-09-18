@@ -10,4 +10,13 @@
    <FileRef
       location = "group:../../swift-atoms/swift-operation">
    </FileRef>
+   <FileRef
+      location = "group:../../swift-atoms/swift-product">
+   </FileRef>
+   <FileRef
+      location = "group:../../swift-atoms/swift-coproduct">
+   </FileRef>
+   <FileRef
+      location = "group:../../swift-atoms/swift-optic">
+   </FileRef>
 </Workspace>
