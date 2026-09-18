@@ -50,3 +50,10 @@ where
         }
     }
 }
+
+extension ComposableArchitecture2.Store {
+    // A requesting feature has one thing to send: its request, as the operation's call.
+    public func send<Symbol: Operation.Composed>() where State == Requesting<Symbol>.State, Action == Symbol.Call {
+        send(Symbol.call(state.request))
+    }
+}
