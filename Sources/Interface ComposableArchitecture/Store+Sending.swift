@@ -10,3 +10,18 @@ extension ComposableArchitecture2.Store where Action: Operation.Sending {
         Action.sending { self.send($0) }[keyPath: keyPath]
     }
 }
+
+// A feature whose own actions are an interface's calls, beside the actions of its children: the enum case that
+// carries the call is the witness (`public enum Action: Calls { case call(Reminders.Call) … }`), and the store
+// reads as the interface through it: `store.lists.delete(id)` is `store.send(.call(.lists.delete(id)))`.
+public protocol Calls {
+    associatedtype Call: Operation.Sending
+
+    static func call(_ call: Call) -> Self
+}
+
+extension ComposableArchitecture2.Store where Action: Calls {
+    public subscript<Member>(dynamicMember keyPath: KeyPath<Action.Call.Sending, Member>) -> Member {
+        Action.Call.sending { self.send(Action.call($0)) }[keyPath: keyPath]
+    }
+}
