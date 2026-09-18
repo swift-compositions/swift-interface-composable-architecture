@@ -22,6 +22,11 @@ where
             self.value = value
         }
 
+        // A one-field input is named by its field: `State(.list(id))` observes the page of that list.
+        public init(_ field: Symbol.Input.Field) where Symbol.Input: Operation.Unary {
+            self.request = .init(field)
+        }
+
         public subscript<Member>(dynamicMember keyPath: KeyPath<Symbol.Output.Element, Member>) -> Member? {
             value?[keyPath: keyPath]
         }

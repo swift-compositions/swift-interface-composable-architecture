@@ -21,6 +21,11 @@ where
             self.request = request
         }
 
+        // A one-field input is composed from its field: `State(List<Reminder>.Draft())`.
+        public init(_ field: Symbol.Input.Field) where Symbol.Input: Operation.Unary {
+            self.request = .init(field)
+        }
+
         public subscript<Member>(dynamicMember keyPath: KeyPath<Symbol.Input, Member>) -> Member {
             request[keyPath: keyPath]
         }
