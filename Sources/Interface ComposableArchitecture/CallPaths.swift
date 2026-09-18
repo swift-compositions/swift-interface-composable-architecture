@@ -26,15 +26,6 @@ public struct CallPaths<Call: Operation.Coproduct>: CasePath {
     ) -> CallPath<Call, Value> {
         CallPath(Call.cases[keyPath: keyPath])
     }
-
-    /// The path of a child with no actions of its own (an `Observing`): nothing is ever extracted or embedded.
-    public var never: NeverPath<Call> { NeverPath() }
-}
-
-public struct NeverPath<Call>: CasePath {
-    public func embed(_ value: Never) -> Call {}
-
-    public func extract(from root: Call) -> Never? { nil }
 }
 
 public struct CallPath<Call: Operation.Coproduct, Value>: CasePath {
