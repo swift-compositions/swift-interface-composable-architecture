@@ -1,23 +1,27 @@
 public import ComposableArchitecture2
 public import Operation
 
-// A request kept under observation: the value follows the stream for the current request, and a
-// new request restarts the stream.
+// An observe operation's request kept under observation: the value follows the operation's sequence for
+// the current request, and a new request restarts it.
 @ComposableArchitecture2.Feature public struct Observing<Symbol: Operation.Symbol>
-where Symbol.Input: Swift.Copyable & Swift.Escapable & Swift.Equatable, Symbol.Output: Swift.Copyable & Swift.Escapable {
+where
+    Symbol.Input: Swift.Copyable & Swift.Escapable & Swift.Equatable,
+    Symbol.Output: AsyncSequence,
+    Symbol.Output.Element: Swift.Copyable & Swift.Escapable
+{
     public struct State {
         public var request: Symbol.Input
-        public var value: Symbol.Output?
+        public var value: Symbol.Output.Element?
 
-        public init(request: Symbol.Input, value: Symbol.Output? = nil) {
+        public init(request: Symbol.Input, value: Symbol.Output.Element? = nil) {
             self.request = request
             self.value = value
         }
     }
 
-    let observe: (Symbol.Input) -> AsyncThrowingStream<Symbol.Output, any Swift.Error>
+    let observe: (Symbol.Input) -> Symbol.Output
 
-    public init(_ observe: @escaping (Symbol.Input) -> AsyncThrowingStream<Symbol.Output, any Swift.Error>) {
+    public init(_ observe: @escaping (Symbol.Input) -> Symbol.Output) {
         self.observe = observe
     }
 

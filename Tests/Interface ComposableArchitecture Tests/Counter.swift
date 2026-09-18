@@ -10,6 +10,7 @@ struct Counter: Counter.Interface {
 
     protocol Interface {
         func increment(by amount: Int) async throws(Failure)
+        func observe(from start: Int) -> AsyncThrowingStream<Int, any Swift.Error>
         func read() async -> Int
     }
 }

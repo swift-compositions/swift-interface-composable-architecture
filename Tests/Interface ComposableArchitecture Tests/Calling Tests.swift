@@ -38,6 +38,7 @@ import Testing
                 guard request.amount > 0 else { throw .refused }
                 ledger.record("increment \(request.amount)")
             },
+            observe: { _ in AsyncThrowingStream { $0.finish() } },
             read: { _ in ledger.entries.count }
         )
         let store = TestStore(initialState: Counting.State()) { Counting(counter: counter) }

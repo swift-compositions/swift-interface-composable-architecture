@@ -5,7 +5,7 @@ is universal: the atoms and the macro know nothing of features or stores; this p
 
 | Type | What it is |
 | --- | --- |
-| `Observing<Symbol>` | A feature whose state is a request under observation: `value` follows the stream for `request`, and a new request restarts the stream. Takes the observe arrow `(Input) -> AsyncThrowingStream<Output, any Error>`. |
+| `Observing<Symbol>` | A feature over an observe operation: `value` follows the operation's async sequence for `request`, and a new request restarts it. Takes the operation's arrow `(Input) -> Output` where `Output: AsyncSequence`. |
 | `Requesting<Symbol>` | A feature whose state is a request being composed: `sendButtonTapped` sends it whole on the `sending` task id and dismisses on success. Takes the operation's arrow `(Input) async throws -> Output`. |
 | `FeatureProtocol.calling(_:id:_:)` | A modifier that runs the interface's interpreter for every action carrying a `Call`, as a task on the given id: `.calling(\.call, id: \.writes) { try await reminders($0) }`. |
 
