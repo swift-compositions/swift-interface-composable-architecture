@@ -1,5 +1,6 @@
 // swift-tools-version: 6.4
 
+import CompilerPluginSupport
 import PackageDescription
 
 let package = Package(
@@ -15,6 +16,8 @@ let package = Package(
         .library(name: "Interface ComposableArchitecture", targets: ["Interface ComposableArchitecture"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/pointfreeco/swift-debug-snapshots", from: "0.4.0"),
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "603.0.2"..<"604.0.0"),
         .package(url: "https://github.com/pointfreeco/TCA26.git", branch: "main", traits: ["Dependencies", "Clocks"]),
         .package(url: "https://github.com/swift-atoms/swift-operation.git", branch: "main"),
         .package(url: "https://github.com/swift-molecules/swift-interface.git", branch: "main"),
@@ -24,9 +27,20 @@ let package = Package(
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.0.0"),
     ],
     targets: [
+        .macro(
+            name: "Interface Composition Macro Plugin",
+            dependencies: [
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+            ]
+        ),
         .target(
             name: "Interface ComposableArchitecture",
             dependencies: [
+                "Interface Composition Macro Plugin",
+                .product(name: "Interface Macro", package: "swift-interface"),
                 .product(name: "CasePaths", package: "swift-case-paths"),
                 .product(name: "ComposableArchitecture2", package: "TCA26"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
@@ -39,6 +53,7 @@ let package = Package(
             name: "Interface ComposableArchitecture Tests",
             dependencies: [
                 .product(name: "ComposableArchitectureTestSupport", package: "TCA26"),
+                .product(name: "DebugSnapshots", package: "swift-debug-snapshots"),
                 "Interface ComposableArchitecture",
                 .product(name: "Interface Macro", package: "swift-interface"),
             ],

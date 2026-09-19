@@ -44,3 +44,36 @@ public struct CallPath<Call: Operation.Coproduct, Value>: CasePath {
         }
     }
 }
+
+
+/// A required child without a matching call interpretation contributes no route.
+/// Concrete macro output selects these overloads using the child's actual Action.
+public func routeInterfaceCall<Root: Operation.Coproduct, Child, Action>(
+    _ root: Root,
+    at path: KeyPath<Root.Cases, Optic<Root, Root, Child, Child>.Case>,
+    through action: Action.Type
+) -> Action? { nil }
+
+/// A leaf whose action is its canonical call needs only the existing case prism.
+public func routeInterfaceCall<Root: Operation.Coproduct, Action>(
+    _ root: Root,
+    at path: KeyPath<Root.Cases, Optic<Root, Root, Action, Action>.Case>,
+    through action: Action.Type
+) -> Action? {
+    switch Root.cases[keyPath: path].match(root) {
+    case let .right(call): call
+    case .left: nil
+    }
+}
+
+/// A composed child routes through its own selected interpretation recursively.
+public func routeInterfaceCall<Root: Operation.Coproduct, Action: Calls>(
+    _ root: Root,
+    at path: KeyPath<Root.Cases, Optic<Root, Root, Action.Call, Action.Call>.Case>,
+    through action: Action.Type
+) -> Action? {
+    switch Root.cases[keyPath: path].match(root) {
+    case let .right(call): Action.route(call)
+    case .left: nil
+    }
+}
