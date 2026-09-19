@@ -24,7 +24,7 @@ import Testing
                 break
             }
         }
-        .calling(\.call, id: \.writes) { try await counter($0) }
+        .calling(\.call, counter, id: \.writes)
     }
 }
 

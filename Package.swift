@@ -58,3 +58,8 @@ for target in package.targets where ![.system, .binary, .plugin, .macro].contain
         .enableUpcomingFeature("InferIsolatedConformances"),
     ]
 }
+
+// Integration consumers enforce import visibility at the compilation boundary.
+for target in package.targets where ![.system, .binary, .plugin, .macro].contains(target.type) {
+    target.swiftSettings = (target.swiftSettings ?? []) + [.treatAllWarnings(as: .error)]
+}

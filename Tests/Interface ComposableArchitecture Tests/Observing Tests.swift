@@ -20,7 +20,7 @@ import Testing
             },
             read: { _ in 0 }
         )
-        let store = TestStore(initialState: Observing<Counter.Observe>.State(request: .init(from: 10))) {
+        let store = TestStore(initialState: Observing<Counter.Observe>.State(.init(from: 10))) {
             Observing { counter.observe($0) }
         }
         while store.value == nil { await Task.yield() }
@@ -31,7 +31,7 @@ import Testing
 
     @Test func `a changed request restarts the stream`() async throws {
         let ledger = Ledger()
-        let store = TestStore(initialState: Observing<Counter.Observe>.State(request: .init(from: 1))) {
+        let store = TestStore(initialState: Observing<Counter.Observe>.State(.init(from: 1))) {
             Observing { request in
                 ledger.record("observe \(request.start)")
                 return AsyncThrowingStream { continuation in

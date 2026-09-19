@@ -45,7 +45,7 @@ where
     }
 
     // The owner is read from the dependencies each time the request is observed.
-    public init(_ path: KeyPath<DependencyValues, Symbol.Owner> & Sendable) {
+    public init(_ path: any KeyPath<DependencyValues, Symbol.Owner> & Sendable) {
         self.observe = { try await Symbol.run(Dependency(path).wrappedValue, $0) }
     }
 

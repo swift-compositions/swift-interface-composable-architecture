@@ -1,3 +1,6 @@
+import CasePaths
+import Interface_ComposableArchitecture
+import Operation
 import Interface_Macro
 import Synchronization
 
@@ -8,7 +11,6 @@ struct Counter: Counter.Interface {
         case refused
     }
 
-    @Operations
     protocol Interface {
         func increment(by amount: Int) async throws(Failure)
         func observe(from start: Int) -> AsyncThrowingStream<Int, any Swift.Error>
@@ -23,3 +25,5 @@ final class Ledger: Sendable {
 
     func record(_ entry: String) { storage.withLock { $0.append(entry) } }
 }
+
+extension Counter.Call: CasePathable {}

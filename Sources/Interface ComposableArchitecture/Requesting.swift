@@ -45,7 +45,7 @@ where
     }
 
     // The interface is read from the dependencies each time a call is sent.
-    public init(_ path: KeyPath<DependencyValues, Symbol.Owner> & Sendable) {
+    public init(_ path: any KeyPath<DependencyValues, Symbol.Owner> & Sendable) {
         self.interpret = { try await Symbol.Call.run(Dependency(path).wrappedValue, $0) }
     }
 
