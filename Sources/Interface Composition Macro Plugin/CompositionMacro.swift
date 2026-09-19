@@ -19,6 +19,16 @@ public struct CompositionMacro: MemberMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
+        try derive(of: node, providingMembersOf: declaration, conformingTo: protocols, in: context, sourceBody: false)
+    }
+
+    static func derive(
+        of node: AttributeSyntax,
+        providingMembersOf declaration: some DeclGroupSyntax,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext,
+        sourceBody: Bool
+    ) throws -> [DeclSyntax] {
         guard let declaration = declaration.as(ExtensionDeclSyntax.self) else {
             throw MacroExpansionErrorMessage("@FeatureComposition requires a source extension of the interface being interpreted.")
         }
@@ -112,12 +122,24 @@ public struct CompositionMacro: MemberMacro {
         let action: String
         if let calls {
             action = """
-                public enum Action: Interface_ComposableArchitecture.Calls, CasePaths.CasePathable {
+                public enum Action: Interface_ComposableArchitecture.InterfaceCalls, CasePaths.CasePathable {
                     case call(\(calls))
                     \(cases.joined(separator: "\n"))
                     public static func route(_ call: \(calls)) -> Self {
                         \(routing)
                         return .call(call)
+                    }
+                    public var interfaceCall: \(calls)? {
+                        switch self {
+                        case let .call(call): return call
+                        \(children.map { child in
+                            """
+                            case let .\(child.name)(action):
+                                guard let call = Interface_ComposableArchitecture.canonicalInterfaceCall(action, as: \(child.feature).Call.self) else { return nil }
+                                return \(calls).cases.\(child.name).embed(call)
+                            """
+                        }.joined(separator: "\n"))
+                        }
                     }
                 }
                 """
@@ -139,6 +161,7 @@ public struct CompositionMacro: MemberMacro {
             body += "\n.ifLet(\\.\(child.name), action: \\.\(child.name)) { owner[keyPath: \(child.type).path] }"
         }
         body += "\n.interface(owner)"
+        if sourceBody { body = "owner.body" }
         let projectionMembers = children.filter { $0.kind == "required" }.map {
             """
             public var \($0.name): ComposableArchitecture2.Store<\($0.feature).State, \($0.feature).Action> {

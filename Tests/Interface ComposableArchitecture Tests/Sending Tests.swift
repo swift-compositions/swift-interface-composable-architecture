@@ -10,7 +10,7 @@ import Testing
 }
 extension CounterDomain.Call: CasePathable {}
 
-@Feature private struct DirectSending {
+@ComposableArchitecture2.Feature private struct DirectSending {
     struct State { @StoreTaskID var writes }
     typealias Action = CounterDomain.Call
     let domain: CounterDomain
@@ -19,7 +19,7 @@ extension CounterDomain.Call: CasePathable {}
     }
 }
 
-@Feature private struct WrappedSending {
+@ComposableArchitecture2.Feature private struct WrappedSending {
     struct State { @StoreTaskID var writes }
     enum Action: Calls { case call(CounterDomain.Call); case unrelated }
     let domain: CounterDomain

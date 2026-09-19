@@ -1,4 +1,4 @@
-public import ComposableArchitecture2
+import ComposableArchitecture2
 public import Operation
 
 extension Operation.Coproduct where Self: Copyable & Escapable {
@@ -17,7 +17,7 @@ where Self: Copyable & Escapable, Input: Copyable & Equatable, Output: AsyncSequ
     public static func observing(_ owner: Owner) -> Observing<Self> { .init(owner) }
 }
 
-extension Operation.Composed where Self: Copyable & Escapable, Input: Copyable, Call: Copyable & CasePathable {
+extension Operation.Composed where Self: Copyable & Escapable, Input: Copyable, Call: Copyable {
     /// Compose a request and dismiss on successful submission.
     public static func requesting(_ owner: Owner) -> Requesting<Self> { .init(owner) }
 }

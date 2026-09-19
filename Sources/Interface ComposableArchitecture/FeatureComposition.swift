@@ -1,6 +1,6 @@
 public import ComposableArchitecture2
 public import Interface_Macro
-public import Operation
+@_exported import Operation
 
 /// Select lifetimes and interpretations of canonical interface coordinates.
 /// Selection values are consumed by the macro; they store no runtime state.
@@ -50,3 +50,13 @@ extension Store where State: InterfaceCompositionState, Action == State.Projecti
         State.Projection(self)[keyPath: path]
     }
 }
+
+/// Interpret a domain-first feature body using canonical Interface coordinates.
+/// The source extension explicitly declares FeatureProtocol on current Swift.
+@attached(member, names: named(State), named(Action), named(Scopes), named(scopes), named(composition), named(_Composition), named(Child), named(Presenting), named(Observing), named(Requesting), named(Listing), named(Editing), named(_ListingRows))
+public macro Feature() = #externalMacro(module: "Interface_Composition_Macro_Plugin", type: "DomainFeatureMacro")
+
+/// Derive the selected draft coordinate beside an existing domain editing policy.
+/// The generated capability alias preserves the lens through an opaque result.
+@attached(member, names: arbitrary)
+public macro EditingPolicy() = #externalMacro(module: "Interface_Composition_Macro_Plugin", type: "EditingPolicyMacro")

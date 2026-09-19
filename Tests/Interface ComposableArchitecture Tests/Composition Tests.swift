@@ -10,7 +10,6 @@ import Testing
 @Interface struct CompositionCommand: CompositionCommand.Interface {
     protocol Interface { func callAsFunction(_ value: Int) async throws }
 }
-extension CompositionCommand.Call: CasePathable {}
 extension CompositionCommand: FeatureProtocol {
     typealias State = Requesting<Run>.State
     typealias Action = Call
@@ -23,28 +22,26 @@ extension CompositionCommand: FeatureProtocol {
         func reset() async throws
     }
 }
-extension CompositionBranch.Call: CasePathable {}
-@FeatureComposition(
-    .presented(CompositionBranch.Structure.form.self),
-    calls: CompositionBranch.Call.self
-)
-extension CompositionBranch: FeatureProtocol {}
+@Interface_ComposableArchitecture.Feature
+extension CompositionBranch: FeatureProtocol {
+    var body: some Feature { Presenting(\.form) }
+}
 
 @Interface struct CompositionRoot: CompositionRoot.Interface {
     protocol Interface { var branch: CompositionBranch { get } }
 }
-extension CompositionRoot.Call: CasePathable {}
-@FeatureComposition(
-    .required(CompositionRoot.Structure.branch.self),
-    calls: CompositionRoot.Call.self
-)
-extension CompositionRoot: FeatureProtocol {}
+@Interface_ComposableArchitecture.Feature
+extension CompositionRoot: FeatureProtocol {
+    var body: some Feature { Child(\.branch) }
+}
 
 @Interface struct CompositionRead: CompositionRead.Interface {
     protocol Interface { func callAsFunction() -> AsyncThrowingStream<Int, any Error> }
 }
-@FeatureComposition(.observing(CompositionRead.Run.self))
-extension CompositionRead: FeatureProtocol {}
+@Interface_ComposableArchitecture.Feature
+extension CompositionRead: FeatureProtocol {
+    var body: some Feature { Observing(self) }
+}
 
 @MainActor
 @Suite struct `Composition Tests` {
@@ -122,4 +119,55 @@ extension CompositionRead: FeatureProtocol {}
         let _: Never.Type = CompositionRead.Action.self
         await store.dismount()
     }
+}
+
+@Test func canonicalProjectionForgetsRoutingWithoutChangingTheAction() throws {
+    let direct = CompositionRoot.Action.call(.branch.form(7))
+    let scoped = CompositionRoot.Action.branch(.call(.form(7)))
+    let presented = CompositionRoot.Action.branch(.form(.run(7)))
+    #expect(direct.interfaceCall?.branch?.form?.value == 7)
+    #expect(scoped.interfaceCall?.branch?.form?.value == 7)
+    #expect(presented.interfaceCall?.branch?.form?.value == 7)
+    // Policy projection is not route normalization: direct root execution must
+    // still use the root lifetime while the scoped action keeps its child route.
+    guard case .call = direct, case .branch = scoped else {
+        Issue.record("Canonical projection changed execution routing")
+        return
+    }
+}
+
+// Two children with the same type must still select distinct coordinates.
+@Interface private struct TwinRoot: TwinRoot.Interface {
+    protocol Interface {
+        var first: CompositionBranch { get }
+        var second: CompositionBranch { get }
+    }
+}
+@Interface_ComposableArchitecture.Feature
+extension TwinRoot: FeatureProtocol {
+    var body: some Feature {
+        Features {
+            Child(\.first)
+            Child(\.second)
+        }
+    }
+}
+
+@MainActor @Test private func sameTypedChildrenKeepDistinctStateAndExecution() async throws {
+    let ledger = Ledger()
+    let root = TwinRoot(
+        first: CompositionBranch(reset: { _ in ledger.record("first") }, form: CompositionCommand { _ in }),
+        second: CompositionBranch(reset: { _ in ledger.record("second") }, form: CompositionCommand { _ in })
+    )
+    let store = Store(initialState: TwinRoot.State()) { root }
+    store.first.form = .init(1)
+    store.second.form = .init(2)
+    #expect(store.state.first.form?.request.value == 1)
+    #expect(store.state.second.form?.request.value == 2)
+    store.first.reset()
+    try await store.first.writes()
+    store.second.reset()
+    try await store.second.writes()
+    #expect(ledger.entries == ["first", "second"])
+    #expect(!store.writes.isRunning)
 }

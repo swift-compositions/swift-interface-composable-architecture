@@ -3,8 +3,8 @@ import Either
 public import Operation
 public import Optic
 
-// An interface's Call is CasePathable through its own optics: `\Reminders.Call.Cases.lists` is the `lists` case,
-// `\.self` the Call itself. One line adopts it: `extension Reminders.Call: CasePathable {}`.
+// Optional adapter for clients explicitly using TCA's case-key-path APIs on canonical calls.
+// The generic interpretations consume canonical calls directly and require no consumer conformance.
 extension CasePathable where Self: Operation.Coproduct, AllCasePaths == CallPaths<Self> {
     public static var allCasePaths: CallPaths<Self> { CallPaths() }
 
@@ -77,3 +77,14 @@ public func routeInterfaceCall<Root: Operation.Coproduct, Action: Calls>(
     case .left: nil
     }
 }
+
+/// An action unrelated to this domain operation contributes no canonical call.
+public func canonicalInterfaceCall<Call, Action>(_ action: Action, as call: Call.Type) -> Call? { nil }
+
+/// A leaf already uses the canonical call as its action.
+public func canonicalInterfaceCall<Call>(_ action: Call, as call: Call.Type) -> Call? { action }
+
+/// A selected composition can forget its route without executing or rerouting it.
+public func canonicalInterfaceCall<Action: InterfaceCalls>(
+    _ action: Action, as call: Action.Call.Type
+) -> Action.Call? { action.interfaceCall }

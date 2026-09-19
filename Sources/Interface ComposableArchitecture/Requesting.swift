@@ -1,15 +1,16 @@
 public import ComposableArchitecture2
 public import Dependencies
 public import Operation
+public import Interface_Macro
 
 // An operation's input being composed, then sent: the feature's actions are the calls of the operation's
 // interface, each run on `sending`; a call that succeeds dismisses the feature, one that fails stays, its error
-// on `sending`. `Requesting<Reminders.Lists.Create>(\.reminders.lists)` — the symbol names the input, the
-// interface runs the calls.
+// on `sending`. `Requesting(reminders.lists.create)` selects the domain's canonical primary operation;
+// the interface runs the calls without the caller naming its operation symbol.
 @ComposableArchitecture2.Feature public struct Requesting<Symbol: Operation.Composed>
 where
     Symbol.Input: Swift.Copyable & Swift.Escapable,
-    Symbol.Call: Swift.Copyable & CasePathable
+    Symbol.Call: Swift.Copyable
 {
     // The state reads as the input it composes: `store.title` is `store.request.title`.
     @dynamicMemberLookup
@@ -42,6 +43,12 @@ where
 
     public init(_ owner: Symbol.Owner) {
         self.interpret = { try await Symbol.Call.run(owner, $0) }
+    }
+
+    /// Infer the canonical primary operation from the domain value. The operation
+    /// symbol remains an implementation detail of this interpretation.
+    public init<Domain: InterfacePrimary>(_ domain: Domain) where Symbol == Domain.Primary {
+        self.interpret = { try await Symbol.Call.run(domain, $0) }
     }
 
     // The interface is read from the dependencies each time a call is sent.

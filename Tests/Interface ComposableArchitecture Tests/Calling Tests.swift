@@ -5,7 +5,7 @@ import Interface_Macro
 import Testing
 
 // A feature whose actions carry the counter's calls.
-@Feature private struct Counting {
+@ComposableArchitecture2.Feature private struct Counting {
     struct State {
         @StoreTaskID var writes
     }

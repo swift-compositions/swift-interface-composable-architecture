@@ -1,73 +1,112 @@
-# Interface composition
+# Domain-first feature interpretation
 
-`@Interface` describes capabilities and emits `Structure` member descriptors. Each
-descriptor has an `Owner`, the original child `Value`, and its canonical key path.
-There is no TCA dependency in that representation, no copied operation model, and
-no attempt to discover imported declarations through another macro's Core.
+`@Interface` owns canonical child coordinates, primary operation metadata, calls,
+embeddings and optics. Its output contains no TCA dependency and no second model
+of the domain. The bridge consumes that output instead of parsing imported domain
+syntax or importing another package's macro Core.
 
-`@FeatureComposition` attaches to a source extension conforming the existing type
-to `FeatureProtocol`. It selects interpretations of those descriptors:
+A source extension declares its interpretation:
 
 ```swift
-@FeatureComposition(
-    .required(Domain.Structure.read.self),
-    .presented(Domain.Structure.create.self),
-    calls: Domain.Call.self
-)
-extension Domain: FeatureProtocol {}
+@Interface_ComposableArchitecture.Feature
+extension Domain: FeatureProtocol {
+    public var body: some Feature {
+        Features {
+            Child(\.read)
+            Child(\.commands)
+        }
+    }
+}
 ```
 
-Required children compose by products of states and sums of routed actions.
-Presented children add an optional state, not a second operation signature.
-`.observing(Domain.Run.self)` selects the existing `Observing` interpretation; its
-`Never` action contributes no route. Initial requests and required states can be
-supplied with `initial:`. Omitted initial values require a valid empty initializer.
-Presentation starts absent and receives its input when opened. Multiple simultaneous
-instances must be modeled explicitly; optional presentation does not infer collection
-identity, navigation policy, or a choice of screen.
+`Child` selects a direct domain coordinate with the parent's lifetime. `Presenting`
+selects an optional child. `Observing(self)` follows the distinguished operation's
+stream. `Requesting(self)` composes and submits its canonical request. The syntax
+contains no operation symbols, structural descriptors, state/action aliases or task
+identifiers. Each existing child receives its own source interpretation.
 
-For a custom root policy, put the annotated empty extension and the conformance
-with its custom `body` in separate source extensions. An annotated extension that
-declares `FeatureProtocol` receives the default body; an extension without that
-conformance declaration derives only the composition. This separation avoids Swift
-6.4's circular macro lookup while resolving a source body's inherited builder.
-The custom body composes its policy with `composition`, without declaring State or Action.
+The composition macro derives one state product and one routed action sum. The
+public domain aliases refer to that implementation. It attaches TCA's `@Feature`
+to a generated member, letting TCA derive observation, case paths, scopes and other
+runtime witnesses. Generated declarations state the needed conformances inline,
+so no witness depends on lowering an extension macro nested inside extension output.
+The implementation delegates behavior to the source body; there is no parallel
+state or independently executed copy of the composition.
 
-The generated `_Composition` is an implementation detail and the sole owner of its
-state storage and routed action sum. `Domain.State`, `.Action`, and `.Scopes` alias
-that output. The macro attaches TCA's `@Feature` to a member declaration so that
-TCA owns observation, case paths, scopes, and runtime machinery. Generated feature,
-state, and action declarations state their conformances directly. Their witnesses
-still come from the attached TCA macros; no conformance depends on a nested macro
-extension being lowered. It does not invoke TCA macro implementation APIs.
-It never extends a type other than the source type being interpreted.
+Child selection matches key paths, not the child type name. Two same-typed children
+therefore retain independent state, task/error ownership and lifetimes. Scoped-store
+projections hold the original store reference. Observation has no actions of its own;
+its result and request remain the canonical operation's types.
 
-A selected child must already conform to `FeatureProtocol`. Leaf integrations can
-alias `Observing`, `Requesting`, `Listing`, or `Editing` state without re-declaring
-it. Source extensions are necessary: a root extension macro cannot extend arbitrary
-imported child types under Swift 6.4's macro rules.
+## Editing and listing
 
-`calls:` selects execution of canonical domain calls in this composition's task
-lifetime. Child routes retain their own execution, error, and dismissal lifetimes.
-They cannot all be collapsed into the root Call without changing semantics.
-Canonical property sending uses `Calls.route`: required children interpret their own
-calls when their Action supports that call family, using the existing case prisms.
-The remaining calls enter `.call`. An explicit `store.send(.call(...))` still chooses
-the root lifetime. This distinction is encoded in generated routing, independent
-of which dynamic-member overload Swift selects for property navigation.
+`@EditingPolicy` attaches to an extension containing an editing property:
 
-Required children have scoped-store projections: `store.lists` refers to the child
-store, and `store.lists.delete(id)` uses that child's canonical sender. Access through
-`store.state` remains an ordinary domain-shaped state value. Optional child state
-is writable on its scoped parent; bindings use that parent's existing TCA scopes.
-The projection holds the store reference, never a copy or parallel state structure.
+```swift
+@EditingPolicy
+extension Domain {
+    public var editing: some EditingFeature {
+        Editing(
+            create: create,
+            update: update,
+            delete: delete,
+            draft: \.draft,
+            blank: .discardNewDeleteExisting(\.isBlank),
+            ignoreUpdateFailure: Update.Error.notFound
+        )
+    }
+}
+```
 
-Compositions publish their owner through `InterfaceContext<Owner>` in the feature
-environment. `WithInterface` lets a descendant interpret an explicit relationship
-requiring an ancestor's capabilities (for example, a query page editing records).
-The nearest enclosing owner wins. A standalone descendant must receive its owner
-with `.interface(owner)`; there is no global fallback or second implementation.
+The macro derives a `DraftProjection` coordinate and a nested `EditingFeature`
+capability alias. The record itself adopts no bridge marker. Editing state can be
+initialized with an original record or a draft, and replacement through the selected
+writable key path preserves identity and complementary fields. Lens laws remain the
+responsibility of the chosen projection; blank/error policies are not algebraic laws.
 
-Deleting a list closes its page, blank drafts are discarded, and successful forms
-dismiss because the application chooses those policies, not because product/sum
-algebra can infer them. Task storage is supplied by the TCA interpretation.
+`Listing(self, rows: \.rows, commands: Domain.self, editing: \.editing,
+deleting: \.delete?.id)` selects a result projection and an opaque editing capability.
+The result adopts no marker conformance either. Listing observes the original result,
+overlays current edits on its rows, and composes editing without downcasting an opaque
+feature. Request fields forward to the existing request storage.
+
+`Editing(in: Domain.self, \.editing)` reuses that exact editing state and policy in
+another existing domain type. Commands and editing resolve from the actual lexical
+interface instance supplied by the composition. Standalone descendants require
+`.interface(domain)`. No global dependency or manufactured instance is consulted.
+
+## Calls, policy and runtime boundaries
+
+Property sending uses the canonical embeddings. Required children route their calls
+through their own interpretation; explicit `.call(...)` selects the root lifetime.
+`InterfaceCalls.interfaceCall` forgets the route only for matching domain policy.
+The original action still executes exactly once in its original scope.
+
+`.dismiss(\.page, matching: \.filter.list, before: \.lists?.delete?.id)` clears only
+a matching presentation before execution. It neither executes nor reroutes the call.
+An error stays on its original task; dismissal is not rolled back. This policy is an
+explicit relationship, not something inferred from names or operation types.
+
+TCA's actionless scopes use the unique injection from Never and do not require a
+CasePathable parent. TCA's declared action scopes take precedence where both routes
+could be inferred. Canonical domain calls therefore need no consumer marker adoption.
+The optional CallPaths adapter remains available to clients explicitly using TCA case
+key paths on canonical calls; the generic interpretations do not require it.
+
+## Source/compiler requirements
+
+- Source extensions retain explicit FeatureProtocol conformance. An extension macro
+  cannot attach to an extension to add that conformance, nor extend unrelated children.
+- Qualify the bridge's Feature macro when importing TCA's macro of the same name.
+- An opaque `some Feature` hides editing-specific capabilities. Use the generated
+  `some EditingFeature` alias for the separately declared policy.
+- Untyped throws supplies no enum context for a bare failure case. Name the domain
+  error value explicitly; only matching update errors are ignored. Other errors propagate.
+- Canonical case projections are partial, so composed deletion paths use optional chaining.
+- The bridge re-exports its Operation algebra because generated public signatures expose
+  its canonical types and conformances under hard MemberImportVisibility checking.
+
+The descriptor-based `@FeatureComposition` remains supported for explicit initial
+values and lower-level interpretation selection. It shares the composition derivation
+with the body-based macro. Neither entry point invents domain operations or copies
+another macro's derivation algorithms.

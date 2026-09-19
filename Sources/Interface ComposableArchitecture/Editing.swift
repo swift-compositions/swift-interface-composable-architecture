@@ -1,30 +1,45 @@
 public import ComposableArchitecture2
+public import Interface_Macro
+public import Operation
 
-/// A writable draft projection. Implementations must preserve identity and all
-/// complementary fields on assignment, and obey get-put, put-get, and put-put.
-public protocol EditableRecord: Identifiable {
+/// A selected writable projection of an existing record. The coordinate, not
+/// the record, conforms. Assignment must preserve identity and complementary
+/// fields and obey the get-put, put-get, and put-put lens laws. Records must
+/// have value semantics: editing a copy must not mutate the saved original.
+public protocol DraftProjection {
+    associatedtype Record: Identifiable
     associatedtype Draft: Equatable
-    var draft: Draft { get set }
+    static var path: WritableKeyPath<Record, Draft> { get }
+}
+
+/// Editing exposes its selected lens and commit semantics through an opaque
+/// capability. A listing can compose it without knowing its implementation type.
+public protocol EditingFeature<Projection>: FeatureProtocol
+where State == Editing<Projection>.State, Action == Never {
+    associatedtype Projection: DraftProjection
+    func commit(_ state: State) async throws
 }
 
 /// A reusable interpretation of a record's draft lens and create/update/delete arrows.
 /// Blank-draft behavior and suppressed update failures are explicit policies, not laws.
-@Feature public struct Editing<Record: EditableRecord> {
+@ComposableArchitecture2.Feature public struct Editing<Projection: DraftProjection>: EditingFeature {
+    public typealias Record = Projection.Record
+    public typealias Draft = Projection.Draft
     @dynamicMemberLookup
     public struct State {
-        public var draft: Record.Draft
+        public var draft: Draft
         public let original: Record?
-        public init(_ draft: Record.Draft) { self.draft = draft; self.original = nil }
-        public init(_ original: Record) { self.draft = original.draft; self.original = original }
+        public init(_ draft: Draft) { self.draft = draft; self.original = nil }
+        public init(_ original: Record) { self.draft = original[keyPath: Projection.path]; self.original = original }
         public var id: Record.ID? { original?.id }
-        public var isSaved: Bool { original?.draft == draft }
-        public subscript<Value>(dynamicMember keyPath: WritableKeyPath<Record.Draft, Value>) -> Value {
+        public var isSaved: Bool { original?[keyPath: Projection.path] == draft }
+        public subscript<Value>(dynamicMember keyPath: WritableKeyPath<Draft, Value>) -> Value {
             get { draft[keyPath: keyPath] }
             set { draft[keyPath: keyPath] = newValue }
         }
         public var value: Record? {
             guard var value = original else { return nil }
-            value.draft = draft
+            value[keyPath: Projection.path] = draft
             return value
         }
     }
@@ -34,17 +49,17 @@ public protocol EditableRecord: Identifiable {
         /// Blank drafts are ordinary values; creation and update proceed normally.
         case save
         /// A blank new draft is discarded; a blank existing record is deleted.
-        case discardNewDeleteExisting((Record.Draft) -> Bool)
+        case discardNewDeleteExisting((Draft) -> Bool)
     }
 
-    let create: (Record.Draft) async throws -> Record
+    let create: (Draft) async throws -> Record
     let update: (Record) async throws -> Void
     let delete: (Record.ID) async throws -> Void
     let blank: BlankDraftPolicy
     let ignoreUpdateFailure: (any Error) -> Bool
 
     public init(
-        create: @escaping (Record.Draft) async throws -> Record,
+        create: @escaping (Draft) async throws -> Record,
         update: @escaping (Record) async throws -> Void,
         delete: @escaping (Record.ID) async throws -> Void,
         blank: BlankDraftPolicy = .save,
@@ -52,6 +67,32 @@ public protocol EditableRecord: Identifiable {
     ) {
         self.create = create; self.update = update; self.delete = delete
         self.blank = blank; self.ignoreUpdateFailure = ignoreUpdateFailure
+    }
+
+    /// Typed operations retain their original request and result relationships.
+    /// The selected error value is matched only against update failures; creation
+    /// and deletion failures always propagate, including erased storage errors.
+    public init<Create: InterfacePrimary, Update: InterfacePrimary, Delete: InterfacePrimary, Ignored: Error & Equatable>(
+        create: Create,
+        update: Update,
+        delete: Delete,
+        draft: WritableKeyPath<Record, Draft>,
+        blank: BlankDraftPolicy = .save,
+        ignoreUpdateFailure: Ignored
+    ) where Create.Primary.Input: Operation.Unary,
+        Create.Primary.Input.Field == Draft, Create.Primary.Output == Record,
+        Update.Primary.Input: Operation.Unary, Update.Primary.Input.Field == Record,
+        Update.Primary.Output == Void,
+        Delete.Primary.Input: Operation.Unary, Delete.Primary.Input.Field == Record.ID,
+        Delete.Primary.Output == Void {
+        precondition(draft == Projection.path, "The editing state and policy must use the same selected draft lens")
+        self.init(
+            create: { try await Create.Primary.run(create, .init($0)) },
+            update: { try await Update.Primary.run(update, .init($0)) },
+            delete: { try await Delete.Primary.run(delete, .init($0)) },
+            blank: blank,
+            ignoreUpdateFailure: { ($0 as? Ignored) == ignoreUpdateFailure }
+        )
     }
 
     /// The same policy used by the feature, also available to non-UI interpreters.

@@ -1,10 +1,11 @@
 public import ComposableArchitecture2
 public import Dependencies
 public import Operation
+public import Interface_Macro
 
 // An operation followed: `value` is the latest element of the sequence the operation yields for `request`,
-// and a new request restarts it. `Observing<Reminders.Read.Page>(reminders.read)` — the symbol names the
-// operation, its owner runs it.
+// and a new request restarts it. `Observing(reminders.read.page)` selects the domain's canonical primary
+// operation; its existing owner supplies the implementation.
 @ComposableArchitecture2.Feature public struct Observing<Symbol: Operation.Operable>
 where
     Symbol.Input: Swift.Copyable & Swift.Escapable & Swift.Equatable,
@@ -42,6 +43,12 @@ where
 
     public init(_ owner: Symbol.Owner) {
         self.observe = { try await Symbol.run(owner, $0) }
+    }
+
+    /// Infer the canonical primary operation from the domain value. The operation
+    /// symbol remains an implementation detail of this interpretation.
+    public init<Domain: InterfacePrimary>(_ domain: Domain) where Symbol == Domain.Primary {
+        self.observe = { try await Symbol.run(domain, $0) }
     }
 
     // The owner is read from the dependencies each time the request is observed.
