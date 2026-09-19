@@ -49,3 +49,23 @@ import Testing
         await store.dismount()
     }
 }
+
+
+@MainActor @Test func replacedObservationCancelsTheOldLiveStream() async throws {
+    let ledger = Ledger()
+    let store = TestStore(initialState: Observing<Counter.Observe>.State(.init(from: 1))) {
+        Observing { request in
+            AsyncThrowingStream<Int, any Error> { continuation in
+                continuation.onTermination = { _ in ledger.record("stop \(request.start)") }
+                continuation.yield(request.start)
+            }
+        }
+    }
+    while store.value != 1 { await Task.yield() }
+    store.expect { $0.value = 1 }
+    store.modify { $0.request.start = 2 }
+    while store.value != 2 || !ledger.entries.contains("stop 1") { await Task.yield() }
+    store.expect { $0.value = 2 }
+    await store.dismount()
+    #expect(ledger.entries.contains("stop 2"))
+}
