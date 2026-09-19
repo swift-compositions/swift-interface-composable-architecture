@@ -117,23 +117,25 @@ another macro's derivation algorithms.
 constructs the product of that store and explicitly declared value inputs. `@View`
 without a domain constructs value/closure inputs only. It does not generate a View
 body, choose controls, or create a feature. The caller supplies the store; no global
-store lookup or duplicate state is introduced. Custom property wrappers on inputs
+store lookup or duplicate state is introduced. The primary presentation is a concrete nested `Domain.View`; additional roles use
+concrete nested view types, never empty namespaces. The domain owning a presentation
+and the explicitly selected store need not be the same type. Custom property wrappers on inputs
 and handwritten initializers are diagnosed rather than guessed.
 
 The injected store's projected value provides ordinary field bindings and composes
 required/presented child coordinates already selected by `@Feature`:
 
 ```swift
-@View(Domain.self)
-public struct Screen {}
-
-extension Screen: SwiftUI.View {
-    public var body: some SwiftUI.View {
-        NavigationStack {
-            // ...
-        }
-        .sheet(item: $store.children.form) { form in
-            FormView(store: form)
+extension Domain {
+    @View(Domain.self)
+    public struct View: SwiftUI::View {
+        public var body: some SwiftUI::View {
+            NavigationStack {
+                // ...
+            }
+            .sheet(item: $store.children.form) { form in
+                Child.View(store: form)
+            }
         }
     }
 }
