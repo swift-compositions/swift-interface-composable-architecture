@@ -39,6 +39,28 @@ private final class SyntaxBoundaryBundle: NSObject {}
         #expect(diagnostic.contains("conform to 'EditingFeature'"))
     }
 
+    @Test func viewInputsRejectHiddenPropertyWrapperSemantics() throws {
+        let diagnostic = try rejected("""
+            import Interface_ComposableArchitecture
+            import SwiftUI
+            @View struct WrappedInput {
+                @State var count: Int = 0
+            }
+            """)
+        #expect(diagnostic.contains("@View inputs cannot have property wrappers"))
+    }
+
+    @Test func viewInputsRejectCompetingInitializers() throws {
+        let diagnostic = try rejected("""
+            import Interface_ComposableArchitecture
+            @View struct CustomInput {
+                let count: Int
+                init(count: Int) { self.count = count }
+            }
+            """)
+        #expect(diagnostic.contains("@View derives the input initializer"))
+    }
+
     /// Uses the modules and plugins produced by this workspace's build, not a
     /// separately resolved package graph or a developer's global module cache.
     private func rejected(_ source: String) throws -> String {

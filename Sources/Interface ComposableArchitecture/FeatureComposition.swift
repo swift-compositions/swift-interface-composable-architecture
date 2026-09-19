@@ -41,6 +41,7 @@ public protocol InterfaceStoreProjection {
 
 public protocol InterfaceCompositionState {
     associatedtype Projection: InterfaceStoreProjection where Projection.State == Self
+    associatedtype Bindings: InterfaceStoreProjection where Bindings.State == Self
 }
 
 extension Store where State: InterfaceCompositionState, Action == State.Projection.Action {

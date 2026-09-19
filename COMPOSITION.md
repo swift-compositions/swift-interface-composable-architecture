@@ -110,3 +110,43 @@ The descriptor-based `@FeatureComposition` remains supported for explicit initia
 values and lower-level interpretation selection. It shares the composition derivation
 with the body-based macro. Neither entry point invents domain operations or copies
 another macro's derivation algorithms.
+
+## SwiftUI input and presentation interpretation
+
+`@View(Domain.self)` on a view struct injects an existing `StoreOf<Domain>` and
+constructs the product of that store and explicitly declared value inputs. `@View`
+without a domain constructs value/closure inputs only. It does not generate a View
+body, choose controls, or create a feature. The caller supplies the store; no global
+store lookup or duplicate state is introduced. Custom property wrappers on inputs
+and handwritten initializers are diagnosed rather than guessed.
+
+The injected store's projected value provides ordinary field bindings and composes
+required/presented child coordinates already selected by `@Feature`:
+
+```swift
+@View(Domain.self)
+public struct Screen {}
+
+extension Screen: SwiftUI.View {
+    public var body: some SwiftUI.View {
+        NavigationStack {
+            // ...
+        }
+        .sheet(item: $store.children.form) { form in
+            FormView(store: form)
+        }
+    }
+}
+```
+
+`ViewStore` and `ViewBindings` adapt an existing store reference. The generated
+`Bindings` coordinate map delegates to TCA's bindable scopes. Assigning nil ends the
+installed presentation; receiving a child store does not create another lifetime.
+The ordinary writable-field fallback remains available for form drafts.
+
+`EditingRows(store) { record in ... } editor: { store in ... }` interprets Listing's
+existing row identity and selected draft. It replaces the edited row's renderer and
+renders an unsaved draft once after the rows. Both rendering closures remain explicit.
+The reusable `.focusOnPresentation()` modifier owns field focus as a local UI policy;
+it does not run requests or commit edits. Feature dismissal remains responsible for
+commit semantics.

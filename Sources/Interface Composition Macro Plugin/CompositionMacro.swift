@@ -169,6 +169,20 @@ public struct CompositionMacro: MemberMacro {
             }
             """
         }.joined(separator: "\n")
+        let bindingMembers = children.map { child in
+            if child.kind == "required" {
+                return """
+                public var \(child.name): Interface_ComposableArchitecture.ViewBindings<\(child.feature).State, \(child.feature).Action> {
+                    .init(store.scope(\\.\(child.name), action: \\.\(child.name)))
+                }
+                """
+            }
+            return """
+            public var \(child.name): Interface_ComposableArchitecture.PresentationBinding<\(child.feature).State, \(child.feature).Action> {
+                Interface_ComposableArchitecture.ViewBindings(store).presenting(\\.\(child.name), action: \\.\(child.name))
+            }
+            """
+        }.joined(separator: "\n")
         var result: [DeclSyntax] = [
             "public typealias State = _Composition.State",
             "public typealias Action = _Composition.Action",
@@ -187,6 +201,7 @@ public struct CompositionMacro: MemberMacro {
                 public struct State: Interface_ComposableArchitecture.InterfaceCompositionState, ComposableArchitecture2._FeatureState, ComposableArchitecture2.ValueObservable, DebugSnapshots.DebugSnapshotConvertible {
                     public typealias Feature = _Composition
                     public typealias Projection = _Composition.Projection
+                    public typealias Bindings = _Composition.Bindings
                     \(stateMembers.joined(separator: "\n"))
                     public init(\(initializers.joined(separator: ", "))) {
                         \(assignments.joined(separator: "\n"))
@@ -202,6 +217,12 @@ public struct CompositionMacro: MemberMacro {
                     private let store: ComposableArchitecture2.Store<State, Action>
                     public init(_ store: ComposableArchitecture2.Store<State, Action>) { self.store = store }
                     \(projectionMembers)
+                }
+                @MainActor
+                public struct Bindings: Interface_ComposableArchitecture.InterfaceStoreProjection {
+                    private let store: ComposableArchitecture2.Store<State, Action>
+                    public init(_ store: ComposableArchitecture2.Store<State, Action>) { self.store = store }
+                    \(bindingMembers)
                 }
             }
             """))
