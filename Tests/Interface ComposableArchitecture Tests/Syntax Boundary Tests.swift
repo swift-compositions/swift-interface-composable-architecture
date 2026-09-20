@@ -44,10 +44,22 @@ private final class SyntaxBoundaryBundle: NSObject {}
             import Interface_ComposableArchitecture
             import SwiftUI
             @View struct WrappedInput {
-                @State var count: Int = 0
+                @Binding var count: Int
             }
             """)
-        #expect(diagnostic.contains("@View inputs cannot have property wrappers"))
+        #expect(diagnostic.contains("@View supports @State and @FocusState local storage"))
+    }
+
+    @Test func viewLocalStateMustBePrivate() throws {
+        let diagnostic = try rejected("""
+            import Interface_ComposableArchitecture
+            import SwiftUI
+            @View struct SharedState {
+                @State var count = 0
+                var body: some SwiftUI.View { Text("Count") }
+            }
+            """)
+        #expect(diagnostic.contains("@View local state must be private"))
     }
 
     @Test func viewInputsRejectCompetingInitializers() throws {

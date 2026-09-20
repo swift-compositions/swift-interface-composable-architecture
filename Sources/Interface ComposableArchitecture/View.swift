@@ -4,6 +4,8 @@ public import CasePaths
 
 /// Derive construction from a view's input product. An optional feature argument
 /// supplies its existing store and bindings; it never creates a feature or store.
+@attached(memberAttribute)
+@attached(extension, conformances: SwiftUI.View)
 @attached(member, names: named(store), named(_store), named($store), named(init))
 public macro View(_ feature: Any.Type? = nil) = #externalMacro(
     module: "Interface_Composition_Macro_Plugin", type: "ViewMacro"
@@ -14,7 +16,7 @@ public macro View(_ feature: Any.Type? = nil) = #externalMacro(
 @propertyWrapper @MainActor
 public struct ViewStore<Domain: FeatureProtocol>: DynamicProperty {
     public let wrappedValue: StoreOf<Domain>
-    public init(wrappedValue: StoreOf<Domain>) { self.wrappedValue = wrappedValue }
+    public nonisolated init(wrappedValue: StoreOf<Domain>) { self.wrappedValue = wrappedValue }
     public var projectedValue: ViewBindings<Domain.State, Domain.Action> { .init(wrappedValue) }
 }
 

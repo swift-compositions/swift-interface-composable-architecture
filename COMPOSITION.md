@@ -119,8 +119,12 @@ without a domain constructs value/closure inputs only. It does not generate a Vi
 body, choose controls, or create a feature. The caller supplies the store; no global
 store lookup or duplicate state is introduced. The primary presentation is a concrete nested `Domain.View`; additional roles use
 concrete nested view types, never empty namespaces. The domain owning a presentation
-and the explicitly selected store need not be the same type. Custom property wrappers on inputs
-and handwritten initializers are diagnosed rather than guessed.
+and the explicitly selected store need not be the same type. Private `@State` and `@FocusState` properties remain local storage and are excluded
+from construction. Other attributed inputs and handwritten initializers are diagnosed.
+The macro also derives SwiftUI.View conformance and main-actor isolation for instance
+members and construction; the source supplies body. Explicit nonisolated members remain
+nonisolated. ViewStore construction only retains the supplied store; its access and
+bindings remain main-actor isolated.
 
 The injected store's projected value provides ordinary field bindings and composes
 required/presented child coordinates already selected by `@Feature`:
@@ -128,7 +132,7 @@ required/presented child coordinates already selected by `@Feature`:
 ```swift
 extension Domain {
     @View(Domain.self)
-    public struct View: SwiftUI::View {
+    public struct View {
         public var body: some SwiftUI::View {
             NavigationStack {
                 // ...
@@ -152,3 +156,8 @@ renders an unsaved draft once after the rows. Both rendering closures remain exp
 The reusable `.focusOnPresentation()` modifier owns field focus as a local UI policy;
 it does not run requests or commit edits. Feature dismissal remains responsible for
 commit semantics.
+
+`RequestButton("Done", store: store, allowing: !store.isBlank)` reuses the canonical
+request submission and disables itself while sending. Validation remains explicit.
+Forwarding renderer closures can use generated initializer references, for example
+`editor: Reminders.Update.View.init`. Argument-bearing operation actions remain closures.

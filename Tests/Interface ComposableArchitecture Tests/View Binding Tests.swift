@@ -49,6 +49,9 @@ import Testing
         #expect(view.suppliedTitle == "A")
         view.tap()
         #expect(taps == 1)
+        func acceptsView<V: SwiftUI.View>(_ view: V) {}
+        acceptsView(view)
+        acceptsView(ExplicitView())
         let domain = CompositionCommand { _ in }
         let store = Store(initialState: CompositionCommand.State(3)) { domain }
         let form = CommandView(store: store, title: "Request")
@@ -61,12 +64,19 @@ import Testing
 @View private struct ValueView {
     private let title: String
     private let tapped: () -> Void
+    @State private var count = 0
+    @FocusState private var focused: Bool
+    var body: some SwiftUI.View { Text(title) }
     var suppliedTitle: String { title }
     func tap() { tapped() }
 }
 
-@View(CompositionCommand.self) private struct CommandView: SwiftUI.View {
+@View(CompositionCommand.self) private struct CommandView {
     private let title: String
     var request: Int { store.request.value }
     var body: some SwiftUI.View { Text(title) }
+}
+
+@View private struct ExplicitView: SwiftUI.View {
+    var body: some SwiftUI.View { EmptyView() }
 }

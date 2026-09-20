@@ -3,7 +3,37 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 /// Derive view injection only. Layout, feature state, and business policy stay in source.
-public struct ViewMacro: MemberMacro {
+public struct ViewMacro: MemberMacro, MemberAttributeMacro, ExtensionMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        attachedTo declaration: some DeclGroupSyntax,
+        providingAttributesFor member: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [AttributeSyntax] {
+        guard declaration.is(StructDeclSyntax.self),
+            member.is(VariableDeclSyntax.self) || member.is(FunctionDeclSyntax.self) else { return [] }
+        let modifiers = member.as(VariableDeclSyntax.self)?.modifiers ?? member.as(FunctionDeclSyntax.self)!.modifiers
+        let attributes = member.as(VariableDeclSyntax.self)?.attributes ?? member.as(FunctionDeclSyntax.self)!.attributes
+        guard !modifiers.contains(where: { ["static", "class", "nonisolated"].contains($0.name.text) }),
+            !attributes.contains(where: { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "MainActor" }) else { return [] }
+        return ["@MainActor"]
+    }
+
+    public static func expansion(
+        of node: AttributeSyntax,
+        attachedTo declaration: some DeclGroupSyntax,
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext
+    ) throws -> [ExtensionDeclSyntax] {
+        guard let view = declaration.as(StructDeclSyntax.self) else { return [] }
+        let inheritsView = view.inheritanceClause?.inheritedTypes.contains {
+            ["View", "SwiftUI.View", "SwiftUI::View"].contains($0.type.trimmedDescription)
+        } ?? false
+        guard !inheritsView else { return [] }
+        return [try ExtensionDeclSyntax("extension \(type): SwiftUI.View {}")]
+    }
+
     public static func expansion(
         of node: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
@@ -28,7 +58,7 @@ public struct ViewMacro: MemberMacro {
         var assignments: [String] = []
         var members: [DeclSyntax] = []
         if let domain {
-            members.append("@Interface_ComposableArchitecture.ViewStore<\(raw: domain)> private var store: ComposableArchitecture2.StoreOf<\(raw: domain)>")
+            members.append("@MainActor @Interface_ComposableArchitecture.ViewStore<\(raw: domain)> private var store: ComposableArchitecture2.StoreOf<\(raw: domain)>")
             parameters.append("store: ComposableArchitecture2.StoreOf<\(domain)>")
             assignments.append("self._store = Interface_ComposableArchitecture.ViewStore(wrappedValue: store)")
         }
@@ -38,6 +68,18 @@ public struct ViewMacro: MemberMacro {
             }
             guard let variable = member.decl.as(VariableDeclSyntax.self),
                 !variable.modifiers.contains(where: { ["static", "class"].contains($0.name.text) }) else { continue }
+            if !variable.attributes.isEmpty {
+                let names = variable.attributes.compactMap { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription }
+                guard names.count == 1,
+                    ["State", "SwiftUI.State", "SwiftUI::State", "FocusState", "SwiftUI.FocusState", "SwiftUI::FocusState"].contains(names[0]) else {
+                    throw MacroExpansionErrorMessage("@View supports @State and @FocusState local storage; other attributed inputs require explicit support.")
+                }
+                guard !variable.bindings.contains(where: { $0.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "store" }),
+                    variable.modifiers.contains(where: { $0.name.text == "private" }) else {
+                    throw MacroExpansionErrorMessage("@View local state must be private and cannot be named store.")
+                }
+                continue
+            }
             for binding in variable.bindings where binding.accessorBlock == nil {
                 guard let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
                     let type = binding.typeAnnotation?.type else {
@@ -45,9 +87,6 @@ public struct ViewMacro: MemberMacro {
                 }
                 guard name != "store" || domain == nil else {
                     throw MacroExpansionErrorMessage("@View(Domain.self) supplies store; do not redeclare it.")
-                }
-                guard variable.attributes.isEmpty else {
-                    throw MacroExpansionErrorMessage("@View inputs cannot have property wrappers; keep local UI state in a separate view or modifier.")
                 }
                 if variable.bindingSpecifier.text == "let", binding.initializer != nil { continue }
                 let escaping = type.is(FunctionTypeSyntax.self) ? "@escaping " : ""
@@ -57,7 +96,7 @@ public struct ViewMacro: MemberMacro {
             }
         }
         members.append(DeclSyntax(stringLiteral: """
-        \(access)init(\(parameters.joined(separator: ", "))) {
+        @MainActor \(access)init(\(parameters.joined(separator: ", "))) {
             \(assignments.joined(separator: "\n"))
         }
         """))
