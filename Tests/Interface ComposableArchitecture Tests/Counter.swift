@@ -27,3 +27,8 @@ final class Ledger: Sendable {
 }
 
 extension Counter.Call: CasePathable {}
+
+// Capabilities are declared using Swift protocols at the point of use.
+extension Counter.Increment.Input: Hashable, Sendable {}
+extension Counter.Observe.Input: Hashable, Sendable {}
+extension Counter.Read.Input: Hashable, Sendable {}

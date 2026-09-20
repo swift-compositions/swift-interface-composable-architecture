@@ -46,3 +46,6 @@ import Testing
     #expect(store.value == 42)
     await store.dismount()
 }
+
+// Capabilities are declared using Swift protocols at the point of use.
+extension CanonicalRequest.Run.Input: Hashable, Sendable {}

@@ -171,3 +171,8 @@ extension TwinRoot: FeatureProtocol {
     #expect(ledger.entries == ["first", "second"])
     #expect(!store.writes.isRunning)
 }
+
+// Capabilities are declared using Swift protocols at the point of use.
+extension CompositionCommand.Run.Input: Hashable, Sendable {}
+extension CompositionBranch.Reset.Input: Hashable, Sendable {}
+extension CompositionRead.Run.Input: Hashable, Sendable {}
