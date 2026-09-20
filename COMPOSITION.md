@@ -40,12 +40,12 @@ its result and request remain the canonical operation's types.
 
 ## Editing and listing
 
-`@EditingPolicy` attaches to an extension containing an editing property:
+`@Editor` attaches to an extension containing an editing property:
 
 ```swift
-@EditingPolicy
+@Editor
 extension Domain {
-    public var editing: some EditingFeature {
+    public var editing: some Editor {
         Editing(
             create: create,
             update: update,
@@ -58,7 +58,7 @@ extension Domain {
 }
 ```
 
-The macro derives a `DraftProjection` coordinate and a nested `EditingFeature`
+The macro derives a `Lens` coordinate and a nested `Editor`
 capability alias. The record itself adopts no bridge marker. Editing state can be
 initialized with an original record or a draft, and replacement through the selected
 writable key path preserves identity and complementary fields. Lens laws remain the
@@ -99,14 +99,14 @@ key paths on canonical calls; the generic interpretations do not require it.
   cannot attach to an extension to add that conformance, nor extend unrelated children.
 - Qualify the bridge's Feature macro when importing TCA's macro of the same name.
 - An opaque `some Feature` hides editing-specific capabilities. Use the generated
-  `some EditingFeature` alias for the separately declared policy.
+  `some Editor` alias for the separately declared policy.
 - Untyped throws supplies no enum context for a bare failure case. Name the domain
   error value explicitly; only matching update errors are ignored. Other errors propagate.
 - Canonical case projections are partial, so composed deletion paths use optional chaining.
 - The bridge re-exports its Operation algebra because generated public signatures expose
   its canonical types and conformances under hard MemberImportVisibility checking.
 
-The descriptor-based `@FeatureComposition` remains supported for explicit initial
+The descriptor-based `@Composition` remains supported for explicit initial
 values and lower-level interpretation selection. It shares the composition derivation
 with the body-based macro. Neither entry point invents domain operations or copies
 another macro's derivation algorithms.
@@ -123,7 +123,7 @@ and the explicitly selected store need not be the same type. Private `@State` an
 from construction. Other attributed inputs and handwritten initializers are diagnosed.
 The macro also derives SwiftUI.View conformance and main-actor isolation for instance
 members and construction; the source supplies body. Explicit nonisolated members remain
-nonisolated. ViewStore construction only retains the supplied store; its access and
+nonisolated. Stored construction only retains the supplied store; its access and
 bindings remain main-actor isolated.
 
 The injected store's projected value provides ordinary field bindings and composes
@@ -145,7 +145,7 @@ extension Domain {
 }
 ```
 
-`ViewStore` and `ViewBindings` adapt an existing store reference. The generated
+`Stored` and `Bindings` adapt an existing store reference. The generated
 `Bindings` coordinate map delegates to TCA's bindable scopes. Assigning nil ends the
 installed presentation; receiving a child store does not create another lifetime.
 The ordinary writable-field fallback remains available for form drafts.

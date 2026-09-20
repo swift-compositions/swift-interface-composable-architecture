@@ -10,7 +10,7 @@ private struct Item: Identifiable, Equatable {
     let created: Int
     var draft: Draft
 }
-private enum ItemDraft: DraftProjection {
+private enum ItemDraft: Lens {
     typealias Record = Item
     typealias Draft = Item.Draft
     static var path: WritableKeyPath<Item, Item.Draft> { \.draft }
@@ -50,17 +50,31 @@ private enum EditFailure: Error { case missing, denied }
         #expect(created)
     }
 
-    @Test func onlyExplicitlySelectedUpdateFailuresAreSuppressed() async throws {
+    @Test func operationFailuresPropagate() async throws {
         var changed = Editing<ItemDraft>.State(original)
         changed.title = "Changed"
-        let ignored = Editing<ItemDraft>(create: { _ in original }, update: { _ in throw EditFailure.missing },
-            delete: { _ in }, ignoreUpdateFailure: { $0 is EditFailure })
-        try await ignored.commit(changed)
-        let propagated = Editing<ItemDraft>(create: { _ in original }, update: { _ in throw EditFailure.denied }, delete: { _ in })
-        await #expect(throws: EditFailure.denied) { try await propagated.commit(changed) }
-        let creation = Editing<ItemDraft>(create: { _ in throw EditFailure.missing }, update: { _ in }, delete: { _ in },
-            ignoreUpdateFailure: { _ in true })
-        await #expect(throws: EditFailure.missing) { try await creation.commit(.init(Item.Draft(title: "New"))) }
+        let update = Editing<ItemDraft>(create: { _ in original }, update: { _ in throw EditFailure.denied }, delete: { _ in })
+        await #expect(throws: EditFailure.denied) { try await update.commit(changed) }
+        let create = Editing<ItemDraft>(create: { _ in throw EditFailure.missing }, update: { _ in }, delete: { _ in })
+        await #expect(throws: EditFailure.missing) { try await create.commit(.init(Item.Draft(title: "New"))) }
+        let delete = Editing<ItemDraft>(create: { _ in original }, update: { _ in },
+            delete: { _ in throw EditFailure.denied }, blank: .discardNewDeleteExisting { $0.title.isEmpty })
+        changed.title = ""
+        await #expect(throws: EditFailure.denied) { try await delete.commit(changed) }
+    }
+
+    @MainActor @Test func manualCommitDoesNotSaveOnDismount() async throws {
+        var events: [String] = []
+        let feature = Editing<ItemDraft>(
+            create: { draft in events.append(draft.title); return Item(id: 2, created: 0, draft: draft) },
+            update: { _ in }, delete: { _ in }, commit: .manual, discard: .manual
+        )
+        let state = Editing<ItemDraft>.State(Item.Draft(title: "Draft"))
+        let store = TestStore(initialState: state) { feature }
+        await store.dismount()
+        expectNoDifference(events, [])
+        try await feature.commit(state)
+        expectNoDifference(events, ["Draft"])
     }
 
     @MainActor @Test func dismountCommitsTheFinalDraftOnce() async throws {
@@ -91,4 +105,15 @@ private enum EditFailure: Error { case missing, denied }
     state.title = "Original"
     #expect(state.isSaved)
     #expect(state.value == original)
+}
+
+@Test private func discardingInvalidatesEarlierSessionSnapshots() async throws {
+    var committed = false
+    let feature = Editing<ItemDraft>(create: { draft in committed = true; return Item(id: 2, created: 0, draft: draft) },
+        update: { _ in committed = true }, delete: { _ in committed = true })
+    var state = Editing<ItemDraft>.State(Item.Draft(title: "Unsaved"))
+    let capturedBeforeRemoval = state
+    state.discard()
+    try await feature.commit(capturedBeforeRemoval)
+    #expect(!committed)
 }

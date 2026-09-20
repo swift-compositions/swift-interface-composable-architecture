@@ -3,7 +3,7 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
 /// Derive view injection only. Layout, feature state, and business policy stay in source.
-public struct ViewMacro: MemberMacro, MemberAttributeMacro, ExtensionMacro {
+public struct View: MemberMacro, MemberAttributeMacro, ExtensionMacro {
     public static func expansion(
         of node: AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
@@ -58,9 +58,9 @@ public struct ViewMacro: MemberMacro, MemberAttributeMacro, ExtensionMacro {
         var assignments: [String] = []
         var members: [DeclSyntax] = []
         if let domain {
-            members.append("@MainActor @Interface_ComposableArchitecture.ViewStore<\(raw: domain)> private var store: ComposableArchitecture2.StoreOf<\(raw: domain)>")
+            members.append("@MainActor @Interface_ComposableArchitecture.Stored<\(raw: domain)> private var store: ComposableArchitecture2.StoreOf<\(raw: domain)>")
             parameters.append("store: ComposableArchitecture2.StoreOf<\(domain)>")
-            assignments.append("self._store = Interface_ComposableArchitecture.ViewStore(wrappedValue: store)")
+            assignments.append("self._store = Interface_ComposableArchitecture.Stored(wrappedValue: store)")
         }
         for member in declaration.memberBlock.members {
             guard !member.decl.is(InitializerDeclSyntax.self) else {
@@ -68,17 +68,22 @@ public struct ViewMacro: MemberMacro, MemberAttributeMacro, ExtensionMacro {
             }
             guard let variable = member.decl.as(VariableDeclSyntax.self),
                 !variable.modifiers.contains(where: { ["static", "class"].contains($0.name.text) }) else { continue }
-            if !variable.attributes.isEmpty {
-                let names = variable.attributes.compactMap { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription }
+            var bindingInput = false
+            let names = variable.attributes.compactMap { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription }.filter { $0 != "MainActor" }
+            if !names.isEmpty {
+                if names.count == 1, ["Binding", "SwiftUI.Binding", "SwiftUI::Binding"].contains(names[0]) {
+                    bindingInput = true
+                } else {
                 guard names.count == 1,
                     ["State", "SwiftUI.State", "SwiftUI::State", "FocusState", "SwiftUI.FocusState", "SwiftUI::FocusState"].contains(names[0]) else {
-                    throw MacroExpansionErrorMessage("@View supports @State and @FocusState local storage; other attributed inputs require explicit support.")
+                    throw MacroExpansionErrorMessage("@View supports @Binding inputs and @State/@FocusState local storage; other attributed inputs require explicit support.")
                 }
                 guard !variable.bindings.contains(where: { $0.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "store" }),
                     variable.modifiers.contains(where: { $0.name.text == "private" }) else {
                     throw MacroExpansionErrorMessage("@View local state must be private and cannot be named store.")
                 }
                 continue
+                }
             }
             for binding in variable.bindings where binding.accessorBlock == nil {
                 guard let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
@@ -89,6 +94,12 @@ public struct ViewMacro: MemberMacro, MemberAttributeMacro, ExtensionMacro {
                     throw MacroExpansionErrorMessage("@View(Domain.self) supplies store; do not redeclare it.")
                 }
                 if variable.bindingSpecifier.text == "let", binding.initializer != nil { continue }
+                if bindingInput {
+                    guard binding.initializer == nil else { throw MacroExpansionErrorMessage("Binding inputs cannot declare independent default storage.") }
+                    parameters.append("\(name): SwiftUI.Binding<\(type.trimmedDescription)>")
+                    assignments.append("self._\(name) = \(name)")
+                    continue
+                }
                 let escaping = type.is(FunctionTypeSyntax.self) ? "@escaping " : ""
                 let initial = binding.initializer.map { " = \($0.value.trimmedDescription)" } ?? ""
                 parameters.append("\(name): \(escaping)\(type.trimmedDescription)\(initial)")

@@ -9,7 +9,7 @@ extension ComposableArchitecture2.FeatureProtocol where Action: Operation.Coprod
         _ owner: Action.Owner,
         id: KeyPath<State, StoreTaskID>
     ) -> some ComposableArchitecture2.FeatureProtocol<State, Action> {
-        self.modifier(Calling(extract: { $0 }, id: id) { try await Action.run(owner, $0) })
+        self.modifier(Invocation(extract: { $0 }, id: id) { try await Action.run(owner, $0) })
     }
 }
 
@@ -21,11 +21,11 @@ extension ComposableArchitecture2.FeatureProtocol where Action: CasePathable {
         _ owner: Call.Owner,
         id: KeyPath<State, StoreTaskID>
     ) -> some ComposableArchitecture2.FeatureProtocol<State, Action> {
-        self.modifier(Calling(extract: { $0[case: path] }, id: id) { try await Call.run(owner, $0) })
+        self.modifier(Invocation(extract: { $0[case: path] }, id: id) { try await Call.run(owner, $0) })
     }
 }
 
-private struct Calling<State, Action, Call>: FeatureModifier {
+private struct Invocation<State, Action, Call>: FeatureModifier {
     let extract: (Action) -> Call?
     let id: KeyPath<State, StoreTaskID>
     let interpret: (Call) async throws -> Void

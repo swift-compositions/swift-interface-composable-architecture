@@ -2,23 +2,23 @@ public import ComposableArchitecture2
 
 /// Lexically supplied interface implementation. Nested interpretations reuse the
 /// enclosing model rather than looking up a second implementation globally.
-public enum InterfaceContext<Owner>: FeatureEnvironmentKey {
+public enum Context<Owner>: FeatureEnvironmentKey {
     public static var liveValue: Owner? { nil }
     public static var testValue: Owner? { nil }
 }
 
 extension FeatureProtocol {
     public func interface<Owner>(_ owner: Owner) -> some Feature {
-        self.transformEnvironment { $0[InterfaceContext<Owner>.self] = owner }
+        self.transformEnvironment { $0[Context<Owner>.self] = owner }
     }
 }
 
 /// Interpret a relationship that needs an enclosing interface's capabilities.
 /// The root composition supplies that interface for the lifetime of its tree.
-public struct WithInterface<Owner, Content: FeatureProtocol>: FeatureProtocol {
+public struct Inherited<Owner, Content: FeatureProtocol>: FeatureProtocol {
     public typealias State = Content.State
     public typealias Action = Content.Action
-    @FeatureEnvironment(InterfaceContext<Owner>.self) private var owner
+    @FeatureEnvironment(Context<Owner>.self) private var owner
     private let content: (Owner) -> Content
 
     public init(_ owner: Owner.Type, content: @escaping (Owner) -> Content) {

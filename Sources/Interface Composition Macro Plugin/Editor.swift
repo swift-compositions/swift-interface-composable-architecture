@@ -4,7 +4,7 @@ import SwiftSyntaxMacros
 
 /// Derives a type-level witness for a selected lens. The domain record and its
 /// operations remain unchanged; this macro owns only the editing relationship.
-public struct EditingPolicyMacro: MemberMacro {
+public struct Editor: MemberMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
@@ -12,7 +12,7 @@ public struct EditingPolicyMacro: MemberMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let ext = declaration.as(ExtensionDeclSyntax.self) else {
-            throw MacroExpansionErrorMessage("@EditingPolicy requires an extension containing its editing property.")
+            throw MacroExpansionErrorMessage("@Editor requires an extension containing its editing property.")
         }
         let owner = ext.extendedType.trimmedDescription
         let properties = ext.memberBlock.members.compactMap { $0.decl.as(VariableDeclSyntax.self) }
@@ -46,30 +46,36 @@ public struct EditingPolicyMacro: MemberMacro {
         let create = try coordinate("create")
         let update = try coordinate("update")
         let delete = try coordinate("delete")
+        let deletionProperty = String(try argument("delete").trimmedDescription.split(separator: ".").last!)
         guard let path = try argument("draft").as(KeyPathExprSyntax.self) else {
             throw MacroExpansionErrorMessage("Select the existing writable draft using a key path.")
         }
         let capitalized = name.prefix(1).uppercased() + name.dropFirst()
-        let projection = "_\(capitalized)Draft"
+        let projection = "_\(capitalized)"
         let record = path.root?.trimmedDescription ?? "\(create).Output"
         return [DeclSyntax(stringLiteral: """
-            public enum \(projection): Interface_ComposableArchitecture.DraftProjection {
+            public enum \(projection): Interface_ComposableArchitecture.Lens {
                 public typealias Record = \(record)
                 public typealias Draft = \(create).Input.Field
                 public static var path: Swift.WritableKeyPath<Record, Draft> { \(path) }
+                public static func deletedID(_ call: \(owner).Call) -> Record.ID? {
+                    guard let child = \(owner).Call.prisms.\(deletionProperty).extract(call),
+                        let request = \(delete).Primary.input(from: child) else { return nil }
+                    return request.fieldValue
+                }
             }
             """), DeclSyntax(stringLiteral: """
-            public typealias \(capitalized)Feature = Interface_ComposableArchitecture.EditingFeature<\(projection)>
+            public typealias Editor = Interface_ComposableArchitecture.Editor<\(projection)>
             """), DeclSyntax(stringLiteral: """
-            public func Editing<Ignored: Swift.Error & Swift.Equatable>(
+            public func Editing(
                 create: \(create), update: \(update), delete: \(delete),
                 draft: Swift.WritableKeyPath<\(projection).Record, \(projection).Draft>,
-                blank: Interface_ComposableArchitecture.Editing<\(projection)>.BlankDraftPolicy = .save,
-                ignoreUpdateFailure: Ignored
+                blank: Interface_ComposableArchitecture.Editing<\(projection)>.Blank = .save,
+                commit: Interface_ComposableArchitecture.Editing<\(projection)>.Commit = .dismiss,
+                discard: Interface_ComposableArchitecture.Editing<\(projection)>.Discard = .delete
             ) -> Interface_ComposableArchitecture.Editing<\(projection)> {
                 Interface_ComposableArchitecture.Editing<\(projection)>(
-                    create: create, update: update, delete: delete, draft: draft,
-                    blank: blank, ignoreUpdateFailure: ignoreUpdateFailure
+                    create: create, update: update, delete: delete, draft: draft, blank: blank, commit: commit, discard: discard
                 )
             }
             """)]

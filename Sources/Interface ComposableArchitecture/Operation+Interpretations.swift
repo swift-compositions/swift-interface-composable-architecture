@@ -3,7 +3,7 @@ public import Operation
 
 extension Operation.Coproduct where Self: Copyable & Escapable {
     /// Interpret the entire existing call algebra as a feature.
-    public static func feature(_ owner: Owner) -> InterfaceFeature<Self> { .init(owner) }
+    public static func feature(_ owner: Owner) -> Calling<Self> { .init(owner) }
 }
 
 extension Operation.Operable where Self: Copyable & Escapable, Input: Copyable, Output: Copyable {

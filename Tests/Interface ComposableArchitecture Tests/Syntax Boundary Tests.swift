@@ -32,11 +32,11 @@ private final class SyntaxBoundaryBundle: NSObject {}
         let diagnostic = try rejected("""
             import ComposableArchitecture2
             import Interface_ComposableArchitecture
-            func erase<P: DraftProjection>(_ value: Editing<P>) -> some FeatureProtocol<Editing<P>.State, Never> { value }
-            func consume<P: DraftProjection>(_ value: some EditingFeature<P>) {}
-            func check<P: DraftProjection>(_ value: Editing<P>) { consume(erase(value)) }
+            func erase<P: Lens>(_ value: Editing<P>) -> some FeatureProtocol<Editing<P>.State, Never> { value }
+            func consume<P: Lens>(_ value: some Editor<P>) {}
+            func check<P: Lens>(_ value: Editing<P>) { consume(erase(value)) }
             """)
-        #expect(diagnostic.contains("conform to 'EditingFeature'"))
+        #expect(diagnostic.contains("conform to 'Editor'"))
     }
 
     @Test func viewInputsRejectHiddenPropertyWrapperSemantics() throws {
@@ -44,10 +44,10 @@ private final class SyntaxBoundaryBundle: NSObject {}
             import Interface_ComposableArchitecture
             import SwiftUI
             @View struct WrappedInput {
-                @Binding var count: Int
+                @AppStorage("count") var count: Int = 0
             }
             """)
-        #expect(diagnostic.contains("@View supports @State and @FocusState local storage"))
+        #expect(diagnostic.contains("@View supports @Binding inputs and @State/@FocusState local storage"))
     }
 
     @Test func viewLocalStateMustBePrivate() throws {

@@ -10,7 +10,7 @@ import Testing
         increment: { ledger.record("increment \($0.amount)") },
         observe: { _ in AsyncThrowingStream { $0.finish() } }, read: { _ in 42 }
     ))
-    let store = Store(initialState: InterfaceFeature<CounterDomain.Call>.State()) {
+    let store = Store(initialState: Calling<CounterDomain.Call>.State()) {
         CounterDomain.Call.feature(domain)
     }
     store.counter.increment(by: 4)

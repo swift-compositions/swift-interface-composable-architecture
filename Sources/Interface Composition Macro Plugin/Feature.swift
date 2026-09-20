@@ -4,7 +4,7 @@ import SwiftSyntaxMacros
 
 /// Reads interpretation policy from the feature body. Canonical coordinates are
 /// supplied by Interface; TCA remains responsible for state/action machinery.
-public struct DomainFeatureMacro: MemberMacro {
+public struct Feature: MemberMacro {
     private struct Component {
         let kind: String
         let name: String
@@ -26,8 +26,16 @@ public struct DomainFeatureMacro: MemberMacro {
             case let .getter(statements) = block.accessors else {
             throw MacroExpansionErrorMessage("Declare a computed body containing the domain's feature interpretation.")
         }
-        if statements.count == 1,
-            let call = statements.first?.item.as(FunctionCallExprSyntax.self),
+        func rootCall(_ expression: ExprSyntax) -> FunctionCallExprSyntax? {
+            if let call = expression.as(FunctionCallExprSyntax.self) {
+                if call.calledExpression.is(DeclReferenceExprSyntax.self) { return call }
+                if let member = call.calledExpression.as(MemberAccessExprSyntax.self), let base = member.base { return rootCall(base) }
+            }
+            if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base { return rootCall(base) }
+            return nil
+        }
+        if statements.count == 1, let expression = statements.first?.item.as(ExprSyntax.self),
+            let call = rootCall(expression),
             let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text,
             ["Requesting", "Listing", "Editing"].contains(name) {
             return try leaf(call, kind: name, owner: owner)
@@ -49,6 +57,14 @@ public struct DomainFeatureMacro: MemberMacro {
                 }
                 if name == "Features", let closure = call.trailingClosure {
                     result += try components(closure.statements)
+                } else if name == "Children" {
+                    for argument in call.arguments {
+                        guard let path = argument.expression.as(KeyPathExprSyntax.self), path.components.count == 1,
+                            let property = path.components.first?.component.as(KeyPathPropertyComponentSyntax.self) else {
+                            throw MacroExpansionErrorMessage("Children selects direct canonical interface child key paths.")
+                        }
+                        result.append(Component(kind: "Child", name: property.declName.baseName.text))
+                    }
                 } else if ["Child", "Presenting"].contains(name) {
                     guard let path = call.arguments.first?.expression.as(KeyPathExprSyntax.self),
                         path.components.count == 1,
@@ -79,8 +95,8 @@ public struct DomainFeatureMacro: MemberMacro {
             default: ".observing(\(owner).Primary.self)"
             }
         } + (hasObservation ? [] : ["calls: \(owner).Call.self"])
-        let compositionAttribute = AttributeSyntax(stringLiteral: "@FeatureComposition(\(arguments.joined(separator: ", ")))")
-        var result = try CompositionMacro.derive(
+        let compositionAttribute = AttributeSyntax(stringLiteral: "@Composition(\(arguments.joined(separator: ", ")))")
+        var result = try Composition.derive(
             of: compositionAttribute, providingMembersOf: ext, conformingTo: protocols, in: context, sourceBody: true
         )
         // Each source expression contributes exactly one piece of the product.
@@ -112,6 +128,19 @@ public struct DomainFeatureMacro: MemberMacro {
                 }
                 """))
         }
+        let required = selections.filter { $0.kind == "Child" }
+        if !required.isEmpty {
+            let parameters = required.enumerated().map { "_ child\($0.offset): Swift.KeyPath<\(owner), Child\($0.offset)>" }
+            result.append(DeclSyntax(stringLiteral: """
+                public func Children<\(required.indices.map { "Child\($0): ComposableArchitecture2.FeatureProtocol" }.joined(separator: ", "))>(
+                    \(parameters.joined(separator: ", "))
+                ) -> some Feature {
+                    ComposableArchitecture2.Features {
+                        \(required.indices.map { "Child(child\($0))" }.joined(separator: "\n"))
+                    }
+                }
+                """))
+        }
         if hasObservation {
             result.append(DeclSyntax(stringLiteral: """
                 public func Observing(_ owner: \(owner)) -> some Feature {
@@ -138,13 +167,6 @@ public struct DomainFeatureMacro: MemberMacro {
                     """),
             ]
         }
-        let ownerLabel = kind == "Listing" ? "commands" : "in"
-        guard let expression = call.arguments.first(where: { $0.label?.text == ownerLabel })?.expression,
-            let metatype = expression.as(MemberAccessExprSyntax.self),
-            metatype.declName.baseName.text == "self", let base = metatype.base else {
-            throw MacroExpansionErrorMessage("Select the enclosing domain with \(ownerLabel): Domain.self.")
-        }
-        let ancestor = base.trimmedDescription
         let editingExpression = kind == "Listing"
             ? call.arguments.first(where: { $0.label?.text == "editing" })?.expression
             : call.arguments.last?.expression
@@ -152,17 +174,22 @@ public struct DomainFeatureMacro: MemberMacro {
             let property = editing.components.first?.component.as(KeyPathPropertyComponentSyntax.self) else {
             throw MacroExpansionErrorMessage("Select the ancestor's editing policy with a direct property key path.")
         }
+        let ownerLabel = kind == "Listing" ? "commands" : "in"
+        let explicitOwner = call.arguments.first(where: { $0.label?.text == ownerLabel })?.expression.as(MemberAccessExprSyntax.self)?.base
+        guard let ancestor = editing.root?.trimmedDescription ?? explicitOwner?.trimmedDescription else {
+            throw MacroExpansionErrorMessage("Select a rooted editing key path, such as \\Reminders.editing.")
+        }
         let name = property.declName.baseName.text
-        let projection = "\(ancestor)._\(name.prefix(1).uppercased())\(name.dropFirst())Draft"
+        let projection = "\(ancestor)._\(name.prefix(1).uppercased())\(name.dropFirst())"
         if kind == "Editing" {
             return [
                 DeclSyntax(stringLiteral: "public typealias State = Interface_ComposableArchitecture.Editing<\(projection)>.State"),
                 "public typealias Action = Swift.Never",
                 DeclSyntax(stringLiteral: """
-                    public func Editing<Editor: Interface_ComposableArchitecture.EditingFeature<\(projection)>>(
+                    public func Editing<Editor: Interface_ComposableArchitecture.Editor<\(projection)>>(
                         in owner: \(ancestor).Type, _ policy: Swift.KeyPath<\(ancestor), Editor>
                     ) -> some Feature {
-                        Interface_ComposableArchitecture.WithInterface(owner) { $0[keyPath: policy] }
+                        Interface_ComposableArchitecture.Inherited(owner) { $0[keyPath: policy] }
                     }
                     """),
             ]
@@ -170,10 +197,16 @@ public struct DomainFeatureMacro: MemberMacro {
         guard let rows = call.arguments.first(where: { $0.label?.text == "rows" })?.expression.as(KeyPathExprSyntax.self) else {
             throw MacroExpansionErrorMessage("Listing explicitly selects the observed value's rows with a key path.")
         }
-        let interpretation = "Interface_ComposableArchitecture.Listing<\(owner).Primary, \(ancestor).Call, _ListingRows>"
+        let interpretation = "Interface_ComposableArchitecture.Listing<\(owner).Primary, \(ancestor).Call, _Rows>"
+        let compact = call.arguments.allSatisfy { $0.label?.text != "commands" }
+        let extraParameters = compact ? "" : "commands: \(ancestor).Type,"
+        let deletionParameter = compact ? "" : ", deleting: Swift.KeyPath<\(ancestor).Call, _Rows.Draft.Record.ID?>"
+        let construction = compact
+            ? "\(interpretation)(query, rows: rows, editing: editing, deleting: \(projection).deletedID)"
+            : "\(interpretation)(query, rows: rows, commands: commands, editing: editing, deleting: deleting)"
         return [
             DeclSyntax(stringLiteral: """
-                public enum _ListingRows: Interface_ComposableArchitecture.ListingProjection {
+                public enum _Rows: Interface_ComposableArchitecture.Rows {
                     public typealias Value = \(owner).Primary.Output.Element
                     public typealias Draft = \(projection)
                     public static var rows: Swift.KeyPath<Value, [Draft.Record]> { \(rows) }
@@ -182,14 +215,13 @@ public struct DomainFeatureMacro: MemberMacro {
             DeclSyntax(stringLiteral: "public typealias State = \(interpretation).State"),
             DeclSyntax(stringLiteral: "public typealias Action = \(ancestor).Call"),
             DeclSyntax(stringLiteral: """
-                public func Listing<Editor: Interface_ComposableArchitecture.EditingFeature<\(projection)>>(
+                public func Listing<Editor: Interface_ComposableArchitecture.Editor<\(projection)>>(
                     _ query: \(owner),
-                    rows: Swift.KeyPath<_ListingRows.Value, [_ListingRows.Draft.Record]>,
-                    commands: \(ancestor).Type,
-                    editing: Swift.KeyPath<\(ancestor), Editor>,
-                    deleting: Swift.KeyPath<\(ancestor).Call, _ListingRows.Draft.Record.ID?>
+                    rows: Swift.KeyPath<_Rows.Value, [_Rows.Draft.Record]>,
+                    \(extraParameters)
+                    editing: Swift.KeyPath<\(ancestor), Editor>\(deletionParameter)
                 ) -> \(interpretation) {
-                    \(interpretation)(query, rows: rows, commands: commands, editing: editing, deleting: deleting)
+                    \(construction)
                 }
                 """),
         ]

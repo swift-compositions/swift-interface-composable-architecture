@@ -40,6 +40,6 @@ extension ComposableArchitecture2.Store where Action: Calls {
 /// A routed feature action can be projected back to its canonical domain call.
 /// This forgets the route for policy matching only: dispatch still uses the
 /// original action, preserving the selected child's task and error ownership.
-public protocol InterfaceCalls: Calls {
+public protocol Routed: Calls {
     var interfaceCall: Call? { get }
 }

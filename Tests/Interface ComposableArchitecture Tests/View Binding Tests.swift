@@ -12,11 +12,11 @@ import Testing
             form: CompositionCommand { ledger.record("form \($0.value)") }
         ))
         let store = Store(initialState: CompositionRoot.State()) { root }
-        @ViewStore<CompositionRoot> var injected = store
+        @Stored<CompositionRoot> var injected = store
         store.branch.form = .init(7)
         let binding: Binding<StoreOf<CompositionCommand>?> = $injected.branch.form
         let child = try #require(binding.wrappedValue)
-        @ViewStore<CompositionCommand> var form = child
+        @Stored<CompositionCommand> var form = child
         $form.request.wrappedValue = .init(42)
         #expect(store.state.branch.form?.request.value == 42)
         let sending = child.sending
@@ -32,7 +32,7 @@ import Testing
     @Test func `presentation binding clears the installed child and can select a later child`() throws {
         let root = CompositionRoot(branch: CompositionBranch(reset: { _ in }, form: CompositionCommand { _ in }))
         let store = Store(initialState: CompositionRoot.State()) { root }
-        @ViewStore<CompositionRoot> var injected = store
+        @Stored<CompositionRoot> var injected = store
         let binding: Binding<StoreOf<CompositionCommand>?> = $injected.branch.form
         #expect(binding.wrappedValue == nil)
         store.branch.form = .init(7)

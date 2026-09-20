@@ -3,21 +3,22 @@ public import Operation
 
 /// A selected collection projection and the editing lens for its existing rows.
 /// Neither the result value nor the record adopts a bridge marker conformance.
-public protocol ListingProjection {
+public protocol Rows {
     associatedtype Value
-    associatedtype Draft: DraftProjection
+    associatedtype Draft: Lens
     static var rows: KeyPath<Value, [Draft.Record]> { get }
 }
 
 /// Compose observation, canonical calls, and optional editing. Projections are
 /// coordinates into original domain values; there is no second result model.
 @ComposableArchitecture2.Feature public struct Listing<
-    Symbol: Operation.Operable, Call: Operation.Coproduct, Projection: ListingProjection
+    Symbol: Operation.Operable, Call: Operation.Coproduct, Projection: Rows
 > where Symbol.Input: Copyable & Equatable, Symbol.Output: AsyncSequence,
     Symbol.Output.Element == Projection.Value, Call: Copyable {
     public typealias Record = Projection.Draft.Record
     @dynamicMemberLookup
-    public struct State {
+    public struct State: Discardable {
+        public mutating func discard() { editing?.discard() }
         public var contents: Observing<Symbol>.State
         public var editing: Editing<Projection.Draft>.State?
         @StoreTaskID public var writes
@@ -33,45 +34,52 @@ public protocol ListingProjection {
             set { contents.request[keyPath: path] = newValue }
         }
         public var rows: [Record] {
-            (contents.value?[keyPath: Projection.rows] ?? []).map { row in
-                guard let editing, row.id == editing.id, let replacement = editing.value else { return row }
-                return replacement
-            }
+            contents.value?[keyPath: Projection.rows] ?? []
         }
     }
     public typealias Action = Call
-    @FeatureEnvironment(InterfaceContext<Call.Owner>.self) private var inheritedCommands
+    @FeatureEnvironment(Context<Call.Owner>.self) private var inheritedCommands
     private let query: Symbol.Owner
     private let explicitCommands: Call.Owner?
-    private let editor: (Call.Owner) -> AnyFeature<Editing<Projection.Draft>.State, Never>
+    private let editor: (Call.Owner, StoreTaskID) -> AnyFeature<Editing<Projection.Draft>.State, Never>
+    private let discard: (Call.Owner) -> Editing<Projection.Draft>.Discard
     private let deletedID: (Call) -> Record.ID?
 
-    public init<Editor: EditingFeature<Projection.Draft>>(
+    public init<Policy: Editor<Projection.Draft>>(
         _ query: Symbol.Owner,
         commands: Call.Owner,
-        editing: Editor,
+        editing: Policy,
         deleting deletedID: @escaping (Call) -> Record.ID?
     ) {
         self.query = query
         self.explicitCommands = commands
-        self.editor = { _ in AnyFeature(editing) }
+        self.editor = { _, writes in AnyFeature(Session(policy: editing, writes: writes)) }
+        self.discard = { _ in editing.discard }
         self.deletedID = deletedID
     }
 
     /// Select the actual enclosing interface instance and an opaque editing
     /// capability. This never manufactures a domain implementation.
-    public init<Editor: EditingFeature<Projection.Draft>>(
+    public init<Policy: Editor<Projection.Draft>>(
         _ query: Symbol.Owner,
         rows: KeyPath<Projection.Value, [Record]>,
         commands: Call.Owner.Type,
-        editing: KeyPath<Call.Owner, Editor>,
+        editing: KeyPath<Call.Owner, Policy>,
         deleting deletedID: KeyPath<Call, Record.ID?>
     ) {
-        precondition(rows == Projection.rows, "The listing and its state must use the same rows projection")
+        self.init(query, rows: rows, editing: editing, deleting: { $0[keyPath: deletedID] })
+    }
+
+    public init<Policy: Editor<Projection.Draft>>(
+        _ query: Symbol.Owner, rows: KeyPath<Projection.Value, [Record]>,
+        editing: KeyPath<Call.Owner, Policy>, deleting: @escaping (Call) -> Record.ID?
+    ) {
+        precondition(rows == Projection.rows, "The listing must use its canonical rows projection")
         self.query = query
         self.explicitCommands = nil
-        self.editor = { AnyFeature($0[keyPath: editing]) }
-        self.deletedID = { $0[keyPath: deletedID] }
+        self.editor = { owner, writes in AnyFeature(Session(policy: owner[keyPath: editing], writes: writes)) }
+        self.discard = { $0[keyPath: editing].discard }
+        self.deletedID = deleting
     }
 
     private var commands: Call.Owner {
@@ -84,11 +92,35 @@ public protocol ListingProjection {
     public var body: some Feature {
         Features {
             Update { state, action in
-                if let id = deletedID(action), state.editing?.id == id { state.editing = nil }
+                if discard(commands) == .delete, let id = deletedID(action), state.editing?.id == id {
+                    state.editing?.discard()
+                    state.editing = nil
+                }
             }
             Scope(\.contents) { Observing<Symbol>(query) }
         }
         .calling(commands, id: \.writes)
-        .ifLet(\.editing) { editor(commands) }
+        .ifLet(\.editing) { editor(commands, store.writes) }
+    }
+}
+
+/// Interprets only a session's selected termination policy. The listing owns the
+/// task identity, so failures survive the removal of its optional editor.
+private struct Session<Policy: Editor>: FeatureProtocol {
+    typealias State = Policy.State
+    typealias Action = Never
+    let policy: Policy
+    let writes: StoreTaskID
+    let store = FeatureStore<State, Action>()
+
+    var body: some Feature {
+        EmptyFeature<State, Action>().onDismount {
+            guard policy.commit == .dismiss, !store.state.isDiscarded else { return }
+            do {
+                try await withStoreTaskCancellation(id: writes) { try await policy.commit(store.state) }
+            } catch {
+                // The task identity retains the error for its owner to present.
+            }
+        }
     }
 }

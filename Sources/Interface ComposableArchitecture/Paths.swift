@@ -5,8 +5,8 @@ public import Optic
 
 // Optional adapter for clients explicitly using TCA's case-key-path APIs on canonical calls.
 // The generic interpretations consume canonical calls directly and require no consumer conformance.
-extension CasePathable where Self: Operation.Coproduct, AllCasePaths == CallPaths<Self> {
-    public static var allCasePaths: CallPaths<Self> { CallPaths() }
+extension CasePathable where Self: Operation.Coproduct, AllCasePaths == Paths<Self> {
+    public static var allCasePaths: Paths<Self> { Paths() }
 
     public var `case`: PartialCaseKeyPath<Self> { \.self }
 
@@ -14,7 +14,7 @@ extension CasePathable where Self: Operation.Coproduct, AllCasePaths == CallPath
 }
 
 @dynamicMemberLookup
-public struct CallPaths<Call: Operation.Coproduct>: CasePath {
+public struct Paths<Call: Operation.Coproduct>: CasePath {
     public init() {}
 
     public func embed(_ value: Call) -> Call { value }
@@ -23,28 +23,27 @@ public struct CallPaths<Call: Operation.Coproduct>: CasePath {
 
     public subscript<Value>(
         dynamicMember keyPath: KeyPath<Call.Cases, Optic<Call, Call, Value, Value>.Case>
-    ) -> CallPath<Call, Value> {
-        CallPath(Call.cases[keyPath: keyPath])
-    }
-}
-
-public struct CallPath<Call: Operation.Coproduct, Value>: CasePath {
-    let optic: Optic<Call, Call, Value, Value>.Case
-
-    init(_ optic: Optic<Call, Call, Value, Value>.Case) {
-        self.optic = optic
+    ) -> Case<Value> {
+        Case(Call.cases[keyPath: keyPath])
     }
 
-    public func embed(_ value: Value) -> Call { optic.embed(value) }
+    public struct Case<Value>: CasePath {
+        let optic: Optic<Call, Call, Value, Value>.Case
 
-    public func extract(from root: Call) -> Value? {
-        switch optic.match(root) {
-        case let .right(value): value
-        case .left: nil
+        init(_ optic: Optic<Call, Call, Value, Value>.Case) {
+            self.optic = optic
+        }
+
+        public func embed(_ value: Value) -> Call { optic.embed(value) }
+
+        public func extract(from root: Call) -> Value? {
+            switch optic.match(root) {
+            case let .right(value): value
+            case .left: nil
+            }
         }
     }
 }
-
 
 /// A required child without a matching call interpretation contributes no route.
 /// Concrete macro output selects these overloads using the child's actual Action.
@@ -85,6 +84,6 @@ public func canonicalInterfaceCall<Call, Action>(_ action: Action, as call: Call
 public func canonicalInterfaceCall<Call>(_ action: Call, as call: Call.Type) -> Call? { action }
 
 /// A selected composition can forget its route without executing or rerouting it.
-public func canonicalInterfaceCall<Action: InterfaceCalls>(
+public func canonicalInterfaceCall<Action: Routed>(
     _ action: Action, as call: Action.Call.Type
 ) -> Action.Call? { action.interfaceCall }

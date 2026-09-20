@@ -5,7 +5,7 @@ public import SwiftUI
 /// Submit the canonical request. Validation and labeling remain presentation policy;
 /// execution, errors and successful dismissal belong to Requesting.
 @MainActor
-public struct RequestButton<Symbol: Operation::Operation.Composed>: SwiftUI.View
+public struct Submit<Symbol: Operation::Operation.Composed>: SwiftUI.View
 where Symbol.Input: Copyable & Escapable, Symbol.Call: Copyable {
     private let title: LocalizedStringKey
     private let store: Store<Requesting<Symbol>.State, Symbol.Call>
@@ -22,7 +22,7 @@ where Symbol.Input: Copyable & Escapable, Symbol.Call: Copyable {
     }
 
     public var body: some SwiftUI.View {
-        Button(title) { store.send() }
+        SwiftUI.Button(title) { store.send() }
             .disabled(!allowing || store.sending.isRunning)
     }
 }

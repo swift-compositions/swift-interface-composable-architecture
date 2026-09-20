@@ -4,7 +4,7 @@ import SwiftSyntaxMacros
 
 /// Only interpretation policy is analyzed here. @Interface owns descriptors and
 /// @Feature owns TCA derivation; neither package's Core is imported or reproduced.
-public struct CompositionMacro: MemberMacro {
+public struct Composition: MemberMacro {
     struct Selection {
         let kind: String
         let type: String
@@ -30,7 +30,7 @@ public struct CompositionMacro: MemberMacro {
         sourceBody: Bool
     ) throws -> [DeclSyntax] {
         guard let declaration = declaration.as(ExtensionDeclSyntax.self) else {
-            throw MacroExpansionErrorMessage("@FeatureComposition requires a source extension of the interface being interpreted.")
+            throw MacroExpansionErrorMessage("@Composition requires a source extension of the interface being interpreted.")
         }
         let owner = declaration.extendedType.trimmedDescription
         let existing = declaration.memberBlock.members.compactMap { member -> String? in
@@ -40,7 +40,7 @@ public struct CompositionMacro: MemberMacro {
             return nil
         }
         guard Set(existing).isDisjoint(with: ["State", "Action", "Scopes", "_Composition"]) else {
-            throw MacroExpansionErrorMessage("@FeatureComposition owns State, Action, Scopes, and _Composition; declare interpretation policies instead.")
+            throw MacroExpansionErrorMessage("@Composition owns State, Action, Scopes, and _Composition; declare interpretation policies instead.")
         }
         func metatype(_ expression: ExprSyntax) throws -> String {
             guard let access = expression.as(MemberAccessExprSyntax.self),
@@ -122,7 +122,7 @@ public struct CompositionMacro: MemberMacro {
         let action: String
         if let calls {
             action = """
-                public enum Action: Interface_ComposableArchitecture.InterfaceCalls, CasePaths.CasePathable {
+                public enum Action: Interface_ComposableArchitecture.Routed, CasePaths.CasePathable {
                     case call(\(calls))
                     \(cases.joined(separator: "\n"))
                     public static func route(_ call: \(calls)) -> Self {
@@ -172,14 +172,14 @@ public struct CompositionMacro: MemberMacro {
         let bindingMembers = children.map { child in
             if child.kind == "required" {
                 return """
-                public var \(child.name): Interface_ComposableArchitecture.ViewBindings<\(child.feature).State, \(child.feature).Action> {
+                public var \(child.name): Interface_ComposableArchitecture.Bindings<\(child.feature).State, \(child.feature).Action> {
                     .init(store.scope(\\.\(child.name), action: \\.\(child.name)))
                 }
                 """
             }
             return """
-            public var \(child.name): Interface_ComposableArchitecture.PresentationBinding<\(child.feature).State, \(child.feature).Action> {
-                Interface_ComposableArchitecture.ViewBindings(store).presenting(\\.\(child.name), action: \\.\(child.name))
+            public var \(child.name): Interface_ComposableArchitecture.Presentation<\(child.feature).State, \(child.feature).Action> {
+                Interface_ComposableArchitecture.Bindings(store).presenting(\\.\(child.name), action: \\.\(child.name))
             }
             """
         }.joined(separator: "\n")
@@ -198,7 +198,10 @@ public struct CompositionMacro: MemberMacro {
             @ComposableArchitecture2.Feature
             public struct _Composition: ComposableArchitecture2.FeatureProtocol {
                 \(observing == nil ? "" : "@dynamicMemberLookup")
-                public struct State: Interface_ComposableArchitecture.InterfaceCompositionState, ComposableArchitecture2._FeatureState, ComposableArchitecture2.ValueObservable, DebugSnapshots.DebugSnapshotConvertible {
+                public struct State: Interface_ComposableArchitecture.Discardable, Interface_ComposableArchitecture.Composite, ComposableArchitecture2._FeatureState, ComposableArchitecture2.ValueObservable, DebugSnapshots.DebugSnapshotConvertible {
+                    public mutating func discard() {
+                        \(children.map { "Interface_ComposableArchitecture.discardPresentation(&\($0.name))" }.joined(separator: "\n"))
+                    }
                     public typealias Feature = _Composition
                     public typealias Projection = _Composition.Projection
                     public typealias Bindings = _Composition.Bindings
@@ -213,13 +216,13 @@ public struct CompositionMacro: MemberMacro {
                     \(body)
                 }
                 @MainActor
-                public struct Projection: Interface_ComposableArchitecture.InterfaceStoreProjection {
+                public struct Projection: Interface_ComposableArchitecture.Scoping {
                     private let store: ComposableArchitecture2.Store<State, Action>
                     public init(_ store: ComposableArchitecture2.Store<State, Action>) { self.store = store }
                     \(projectionMembers)
                 }
                 @MainActor
-                public struct Bindings: Interface_ComposableArchitecture.InterfaceStoreProjection {
+                public struct Bindings: Interface_ComposableArchitecture.Scoping {
                     private let store: ComposableArchitecture2.Store<State, Action>
                     public init(_ store: ComposableArchitecture2.Store<State, Action>) { self.store = store }
                     \(bindingMembers)

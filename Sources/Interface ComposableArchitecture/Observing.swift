@@ -47,7 +47,7 @@ where
 
     /// Infer the canonical primary operation from the domain value. The operation
     /// symbol remains an implementation detail of this interpretation.
-    public init<Domain: InterfacePrimary>(_ domain: Domain) where Symbol == Domain.Primary {
+    public init<Domain: Interface.Primary>(_ domain: Domain) where Symbol == Domain.Primary {
         self.observe = { try await Symbol.run(domain, $0) }
     }
 
