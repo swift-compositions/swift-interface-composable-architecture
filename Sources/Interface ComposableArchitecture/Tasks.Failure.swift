@@ -9,7 +9,6 @@ public enum Tasks {
         private let tasks: [StoreTaskID]
         public init(_ tasks: StoreTaskID...) { self.title = nil; self.tasks = tasks }
         public init(_ title: LocalizedStringKey, _ tasks: StoreTaskID...) { self.title = Text(title); self.tasks = tasks }
-        /// A title from any bundle: `Text("Not saved", bundle: #bundle)`.
         public init(_ title: Text, _ tasks: StoreTaskID...) { self.title = title; self.tasks = tasks }
 
         public var body: some SwiftUI.View {

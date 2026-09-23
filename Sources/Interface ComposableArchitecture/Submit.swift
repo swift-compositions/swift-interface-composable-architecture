@@ -11,7 +11,6 @@ where Symbol.Input: Copyable & Escapable, Symbol.Call: Copyable {
     private let store: Store<Requesting<Symbol>.State, Symbol.Call>
     private let allowing: Bool
 
-    /// A title from any bundle: `Text("Add", bundle: #bundle)`.
     public init(
         _ title: Text,
         store: Store<Requesting<Symbol>.State, Symbol.Call>,
