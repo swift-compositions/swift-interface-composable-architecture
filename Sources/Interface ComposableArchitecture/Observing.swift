@@ -2,11 +2,13 @@ public import ComposableArchitecture2
 public import Dependencies
 public import Operation
 public import Interface_Macro
+public import SwiftUI
 
 // An operation followed: `value` is the latest element of the sequence the operation yields for `request`,
 // and a new request restarts it. `Observing(reminders.read.page)` selects the domain's canonical primary
-// operation; its existing owner supplies the implementation.
-@ComposableArchitecture2.Feature public struct Observing<Symbol: Operation.Operable>
+// operation; its existing owner supplies the implementation. Every element lands in the animation the feature tree
+// declares with `animation(_:)`, as sqlite-data's animated fetches do; without one, each lands as it comes.
+@ComposableArchitecture2.Feature public struct Observing<Symbol: Operation::Operation.Operable>
 where
     Symbol.Input: Swift.Copyable & Swift.Escapable & Swift.Equatable,
     Symbol.Output: AsyncSequence,
@@ -24,7 +26,7 @@ where
         }
 
         // A one-field input is named by its field: `State(.list(id))` observes the page of that list.
-        public init(_ field: Symbol.Input.Field) where Symbol.Input: Operation.Unary {
+        public init(_ field: Symbol.Input.Field) where Symbol.Input: Operation::Operation.Unary {
             self.request = .init(field)
         }
 
@@ -36,6 +38,7 @@ where
     public typealias Action = Never
 
     let observe: (Symbol.Input) async throws -> Symbol.Output
+    @FeatureEnvironment(Delivery.self) private var animation
 
     public init(_ observe: @escaping (Symbol.Input) async throws -> Symbol.Output) {
         self.observe = observe
@@ -61,9 +64,22 @@ where
             .onChange(of: store.request, initial: true) { _, request, _ in
                 store.addTask {
                     for try await value in try await observe(request) {
-                        try store.modify { $0.value = value }
+                        try withAnimation(animation) { _ = try store.modify { $0.value = value } }
                     }
                 }
             }
     }
+}
+
+extension FeatureProtocol {
+    /// What every observation within this feature delivers lands in `animation`, as a binding's `animation()` lands
+    /// what it sets. `animation()` names no SwiftUI type, so a Feature target need not import SwiftUI to animate.
+    public func animation(_ animation: SwiftUI.Animation? = .default) -> some Feature {
+        self.transformEnvironment { $0[Delivery.self] = animation }
+    }
+}
+
+private enum Delivery: FeatureEnvironmentKey {
+    static var liveValue: SwiftUI.Animation? { nil }
+    static var testValue: SwiftUI.Animation? { nil }
 }
